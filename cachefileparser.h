@@ -56,8 +56,6 @@ class CacheFileParser
 public:
     CacheFileParser();
 
-    CacheFileParser();
-
     bool parse(const QString &folderPath, VideoInfo &outVideoInfo);
     bool parseEntryJson(const QDir &dir, VideoInfo &info);
     bool parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
