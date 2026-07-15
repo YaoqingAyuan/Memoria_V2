@@ -5,8 +5,11 @@
 #include <QDebug>
 //缓存(Cache)文件(File)解析器(Parser)类
 
+//在这个类里前面声明一个命名空间，能否让下面的函数全部去掉“CacheFileParser::”
+//毕竟看着太扎眼了
 CacheFileParser::CacheFileParser() {}
 
+//解析(parse)函数
 bool CacheFileParser::parse(const QString &folderPath, VideoInfo &outVideoInfo) {
     logDebug(QString("[Parser] >>> 开始扫描目录: %1").arg(folderPath));
 
@@ -62,6 +65,7 @@ bool CacheFileParser::parse(const QString &folderPath, VideoInfo &outVideoInfo) 
     return true;
 }
 
+//解析(parse)Entry.Json文件
 bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     QString entryPath = dir.filePath("entry.json");
     QFile file(entryPath);
@@ -129,6 +133,7 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     return true;
 }
 
+//解析(parse)Index.Json函数【感觉没必要，毕竟最核心标题等重要信息在Entry.json里面】
 bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream) {
     QString indexPath = dir.filePath("index.json");
     QFile file(indexPath);
@@ -164,7 +169,7 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
             videoStream.codecid = videoObj["codecid"].toInt();
             videoStream.md5 = videoObj["md5"].toString();
             videoStream.size = videoObj["size"].toVariant().toLongLong();
-            videoStream.frameRate = videoObj["frame_rate"].toString();
+            videoStream.FrameRate = videoObj["frame_rate"].toString();
             videoStream.width = videoObj["width"].toInt();
             videoStream.height = videoObj["height"].toInt();
 
@@ -189,6 +194,7 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
     return true;
 }
 
+//寻找(find)媒体(Media)文件(Files),即音视频.m4s
 bool CacheFileParser::findMediaFiles(const QDir &dir, const QString &qualityDir, VideoInfo &info) {
     QFileInfo videoFile(dir.filePath("video.m4s"));
     QFileInfo audioFile(dir.filePath("audio.m4s"));
@@ -212,6 +218,7 @@ bool CacheFileParser::findMediaFiles(const QDir &dir, const QString &qualityDir,
     return true;
 }
 
+//获取(get)目录?(Directory)大小(Size)
 qint64 CacheFileParser::getDirectorySize(const QDir &dir) {
     qint64 totalSize = 0;
     QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
@@ -227,14 +234,18 @@ qint64 CacheFileParser::getDirectorySize(const QDir &dir) {
     return totalSize;
 }
 
+//不是哥们？这仨语句理论上应该单独归类(或命名空间)的，毕竟好多模块都得用！
+//控制台Debug语句
 void CacheFileParser::logDebug(const QString &msg) {
     qDebug() << msg;
 }
 
+//控制台Warning(警告)语句
 void CacheFileParser::logWarning(const QString &msg) {
     qWarning() << msg;
 }
 
+//控制台Critical(错误)语句
 void CacheFileParser::logCritical(const QString &msg) {
     qCritical() << msg;
 }
