@@ -8,12 +8,14 @@
 #include <QDir>
 #include <QJsonObject>
 
-//结构体：视频(Video)信息(Infor-mation)
-//读取视频元数据回存储到这里，以备其他模块调用
+//结构体：视频(Video)信息(Infor-mation)，读取的视频元数据存储到这里，以备其他模块调用
+//★标为重要变量:人家出错，将会让主要功能“报废”(至于表格中其他的，空的时候填写“空”、找不到的时候填写“NULL”即可)
+//其他的无关变量存储在另一个“初级容器”中，大部分用不上，
+//估计也就让少量发烧友“右键-查看元数据”后才会“展示”出来
 struct VideoInfo {
     qint64 avid;        //视频Av号【Bv号还会绑Av？】
     QString bvid;       //视频Bv号
-    QString title;      //视频标题
+    QString title;      //★视频标题(重要,命名输出文件)
     QString ownerName;  //Up主昵称
     QString coverUrl;   //封面链接(应该用不着吧？)
     int videoQuality;   //视频质量
@@ -35,10 +37,10 @@ struct VideoInfo {
     PageData pageData;      //声明:VideoInfo里面有个PageData结构体
 
     QString cacheRootPath;  //缓存root路径？
-    QString entryJsonPath;  //entry.Json文件路径
+    QString entryJsonPath;  //★entry.Json文件路径
     QString indexJsonPath;  //index.Json文件路径
-    QString videoFilePath;  //视频文件路径
-    QString audioFilePath;  //音频文件路径
+    QString videoFilePath;  //★视频文件路径
+    QString audioFilePath;  //★音频文件路径
 
     //(布尔型)函数：(路径)是否有效-返回不可修改
     bool isValid() const {
@@ -88,14 +90,13 @@ private:
 
 #endif // CACHEFILEPARSER_H
 
-/* 260715经过阅读，当前类需要解决的问题：
+/* 260716“标准化”全部样本数据，准备修正该模块！(真坐牢！！！)
  * 1.结构体VideoInfo中的isValid() const函数的潜在Bug
  * 2.摸清结构体VideoInfo中的变量都对应了元数据文件的哪个部分？
  * 目标：保留核心(如标题)、显示稳固(如分辨率、大小估测)、不管其他(如番剧季度ID)
  * 3.思考读取文件({字段})→标准化为“换行字段”(为“直接查看元数据”功能准备)
  * →根据所需结构体关键字段(关联)→UI的元数据表格(反正重要的仅仅只有“标题”，剩下的仅供参考)
  * 这一工作流的可能性（有必要的话增加函数）
+ * 【明日2-3-4一起解决！】
  * 4.摸清流信息结构体的作用？【队列类（分配任务）相关？】
- * 5.想办法去掉.cpp里面函数体的“CacheFileParser::”
- * 6.想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）
- * 7.那4个错误是怎么回事儿？回去探究一下   */
+ * 6.想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）  */

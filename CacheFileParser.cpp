@@ -1,12 +1,11 @@
 #include "CacheFileParser.h"
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QFileInfo>
 #include <QDebug>
 //缓存(Cache)文件(File)解析器(Parser)类
 
-//在这个类里前面声明一个命名空间，能否让下面的函数全部去掉“CacheFileParser::”
-//毕竟看着太扎眼了
 CacheFileParser::CacheFileParser() {}
 
 //解析(parse)函数
