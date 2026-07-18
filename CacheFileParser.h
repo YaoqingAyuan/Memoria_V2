@@ -7,11 +7,14 @@
 #include <QString>
 #include <QDir>
 #include <QJsonObject>
+#include <QMap>
+
+//初始容器类型QMap<QString, QString>,读取的entry.json&index.json文件信息进入该容器
+typedef QMap<QString, QString> MetadataContainer;
 
 //结构体：视频(Video)信息(Infor-mation)，读取的视频元数据存储到这里，以备其他模块调用
 //★标为重要变量:人家出错，将会让主要功能“报废”(至于表格中其他的，空的时候填写“空”、找不到的时候填写“NULL”即可)
-//其他的无关变量存储在另一个“初级容器”中，大部分用不上，
-//估计也就让少量发烧友“右键-查看元数据”后才会“展示”出来
+//其他的无关变量存储在容器rawMetadata中，大部分用不上,“右键-查看元数据”后才会“展示”
 struct VideoInfo {
     qint64 avid;        //视频Av号【Bv号还会绑Av？】
     QString bvid;       //视频Bv号
@@ -41,6 +44,7 @@ struct VideoInfo {
     QString indexJsonPath;  //index.Json文件路径
     QString videoFilePath;  //★视频文件路径
     QString audioFilePath;  //★音频文件路径
+
 
     //(布尔型)函数：(路径)是否有效-返回不可修改
     bool isValid() const {
@@ -81,11 +85,23 @@ public:
     bool parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
     bool findMediaFiles(const QDir &dir, const QString &qualityDir, VideoInfo &info);
     qint64 getDirectorySize(const QDir &dir);
+    
+    //将读取的entry.json&index.json文件信息，作为CacheFileParser成员变量
+    //这样每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好？？？
+    //获取entry.json文件信息
+    const MetadataContainer& getEntryJsonData() const { return EntryJsonData; }
+    //获取index.json文件信息
+    const MetadataContainer& getIndexJsonData() const { return IndexJsonData; }
 
 private:
     void logDebug(const QString &msg);
     void logWarning(const QString &msg);
     void logCritical(const QString &msg);
+
+    //读取的entry.json文件信息进入该容器
+    MetadataContainer EntryJsonData;
+    //读取的index.json文件信息进入该容器
+    MetadataContainer IndexJsonData;
 };
 
 #endif // CACHEFILEPARSER_H
