@@ -4,12 +4,11 @@
 #include <QJsonArray>
 #include <QFileInfo>
 #include <QDebug>
-//缓存(Cache)文件(File)解析器(Parser)类
 
 CacheFileParser::CacheFileParser() {}
 
-//解析(parse)函数
-bool CacheFileParser::parse(const QString &folderPath, VideoInfo &outVideoInfo) {
+//文件夹(Cathe)解析(Cathe_Parse)函数:解析文件夹(文件树结构)
+bool CacheFileParser::Cathe_Parse(const QString &folderPath, VideoInfo &outVideoInfo) {
     logDebug(QString("[Parser] >>> 开始扫描目录: %1").arg(folderPath));
 
     QDir dir(folderPath);
@@ -64,7 +63,40 @@ bool CacheFileParser::parse(const QString &folderPath, VideoInfo &outVideoInfo) 
     return true;
 }
 
-//解析(parse)Entry.Json文件
+//Entry.json展平(flatten)函数
+void CacheFileParser::EntryflattenJson(const QJsonObject &obj, const QString &prefix) {
+    for (auto it = obj.begin(); it != obj.end(); ++it) {
+        QString key = prefix.isEmpty() ? it.key() : prefix + "." + it.key();
+        const QJsonValue &value = it.value();
+
+        if (value.isObject()) {
+            EntryflattenJson(value.toObject(), key);
+        } else if (value.isArray()) {
+            QJsonArray arr = value.toArray();
+            QStringList arrValues;
+            for (int i = 0; i < arr.size(); ++i) {
+                if (arr[i].isObject()) {
+                    EntryflattenJson(arr[i].toObject(), key + "[" + QString::number(i) + "]");
+                } else {
+                    arrValues.append(arr[i].toString());
+                }
+            }
+            if (!arrValues.isEmpty()) {
+                EntryJsonData[key] = arrValues.join(", ");
+            }
+        } else {
+            QString strValue = value.toString();
+            if (value.isBool()) {
+                strValue = value.toBool() ? "true" : "false";
+            } else if (value.isDouble()) {
+                strValue = QString::number(value.toDouble());
+            }
+            EntryJsonData[key] = strValue;
+        }
+    }
+}
+
+//EntryJson解析(parse)函数
 bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     QString entryPath = dir.filePath("entry.json");
     QFile file(entryPath);
@@ -89,18 +121,19 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
         return false;
     }
 
-    QJsonObject jsonObj = jsonDoc.object();
+    EntryJsonData.clear();
+    EntryflattenJson(jsonDoc.object(), "");
 
-    info.avid = jsonObj["avid"].toVariant().toLongLong();
-    info.bvid = jsonObj["bvid"].toString();
-    info.title = jsonObj["title"].toString();
-    info.ownerName = jsonObj["owner_name"].toString();
-    info.coverUrl = jsonObj["cover"].toString();
-    info.videoQuality = jsonObj["video_quality"].toInt();
-    info.qualityDescription = jsonObj["quality_pithy_description"].toString();
-    info.totalTimeMilli = jsonObj["total_time_milli"].toVariant().toLongLong();
-    info.totalBytes = jsonObj["total_bytes"].toVariant().toLongLong();
-    info.downloadedBytes = jsonObj["downloaded_bytes"].toVariant().toLongLong();
+    info.avid = EntryJsonData["avid"].toLongLong();
+    info.bvid = EntryJsonData["bvid"];
+    info.title = EntryJsonData["title"];
+    info.ownerName = EntryJsonData["owner_name"];
+    info.coverUrl = EntryJsonData["cover"];
+    info.videoQuality = EntryJsonData["video_quality"].toInt();
+    info.qualityDescription = EntryJsonData["quality_pithy_description"];
+    info.totalTimeMilli = EntryJsonData["total_time_milli"].toLongLong();
+    info.totalBytes = EntryJsonData["total_bytes"].toLongLong();
+    info.downloadedBytes = EntryJsonData["downloaded_bytes"].toLongLong();
 
     if (info.title.isEmpty()) {
         logWarning("[Parser] ⚠️ 警告：解析到的标题为空");
@@ -114,25 +147,57 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
         logDebug(QString("[Parser] ✅ 成功解析 AVID: %1").arg(info.avid));
     }
 
-    if (jsonObj.contains("page_data") && jsonObj["page_data"].isObject()) {
-        QJsonObject pageObj = jsonObj["page_data"].toObject();
-        info.pageData.cid = pageObj["cid"].toVariant().toLongLong();
-        info.pageData.page = pageObj["page"].toInt();
-        info.pageData.partTitle = pageObj["part"].toString();
-        info.pageData.link = pageObj["link"].toString();
-        info.pageData.width = pageObj["width"].toInt();
-        info.pageData.height = pageObj["height"].toInt();
-        info.pageData.rotate = pageObj["rotate"].toInt();
+    info.pageData.cid = EntryJsonData["page_data.cid"].toLongLong();
+    info.pageData.page = EntryJsonData["page_data.page"].toInt();
+    info.pageData.partTitle = EntryJsonData["page_data.part"];
+    info.pageData.link = EntryJsonData["page_data.link"];
+    info.pageData.width = EntryJsonData["page_data.width"].toInt();
+    info.pageData.height = EntryJsonData["page_data.height"].toInt();
+    info.pageData.rotate = EntryJsonData["page_data.rotate"].toInt();
 
-        logDebug(QString("[Parser] ✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(info.pageData.cid).arg(info.pageData.width).arg(info.pageData.height));
-    } else {
+    if (!EntryJsonData.contains("page_data.cid")) {
         logWarning("[Parser] ⚠️ 警告：未找到 page_data 字段");
+    } else {
+        logDebug(QString("[Parser] ✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(info.pageData.cid).arg(info.pageData.width).arg(info.pageData.height));
     }
 
     return true;
 }
 
-//解析(parse)Index.Json函数【感觉没必要，毕竟最核心标题等重要信息在Entry.json里面】
+//index.json展平(flatten)函数
+void CacheFileParser::indexflattenJson(const QJsonObject &obj, const QString &prefix) {
+    for (auto it = obj.begin(); it != obj.end(); ++it) {
+        QString key = prefix.isEmpty() ? it.key() : prefix + "." + it.key();
+        const QJsonValue &value = it.value();
+
+        if (value.isObject()) {
+            indexflattenJson(value.toObject(), key);
+        } else if (value.isArray()) {
+            QJsonArray arr = value.toArray();
+            QStringList arrValues;
+            for (int i = 0; i < arr.size(); ++i) {
+                if (arr[i].isObject()) {
+                    indexflattenJson(arr[i].toObject(), key + "[" + QString::number(i) + "]");
+                } else {
+                    arrValues.append(arr[i].toString());
+                }
+            }
+            if (!arrValues.isEmpty()) {
+                IndexJsonData[key] = arrValues.join(", ");
+            }
+        } else {
+            QString strValue = value.toString();
+            if (value.isBool()) {
+                strValue = value.toBool() ? "true" : "false";
+            } else if (value.isDouble()) {
+                strValue = QString::number(value.toDouble());
+            }
+            IndexJsonData[key] = strValue;
+        }
+    }
+}
+
+//IndexJson解析(parse)函数
 bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream) {
     QString indexPath = dir.filePath("index.json");
     QFile file(indexPath);
@@ -157,43 +222,32 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
         return false;
     }
 
-    QJsonObject jsonObj = jsonDoc.object();
+    IndexJsonData.clear();
+    indexflattenJson(jsonDoc.object(), "");
 
-    if (jsonObj.contains("video") && jsonObj["video"].isArray()) {
-        QJsonArray videoArray = jsonObj["video"].toArray();
-        if (!videoArray.isEmpty()) {
-            QJsonObject videoObj = videoArray.first().toObject();
-            videoStream.id = videoObj["id"].toInt();
-            videoStream.bandwidth = videoObj["bandwidth"].toInt();
-            videoStream.codecid = videoObj["codecid"].toInt();
-            videoStream.md5 = videoObj["md5"].toString();
-            videoStream.size = videoObj["size"].toVariant().toLongLong();
-            videoStream.FrameRate = videoObj["frame_rate"].toString();
-            videoStream.width = videoObj["width"].toInt();
-            videoStream.height = videoObj["height"].toInt();
+    videoStream.id = IndexJsonData["video[0].id"].toInt();
+    videoStream.bandwidth = IndexJsonData["video[0].bandwidth"].toInt();
+    videoStream.codecid = IndexJsonData["video[0].codecid"].toInt();
+    videoStream.md5 = IndexJsonData["video[0].md5"];
+    videoStream.size = IndexJsonData["video[0].size"].toLongLong();
+    videoStream.FrameRate = IndexJsonData["video[0].frame_rate"];
+    videoStream.width = IndexJsonData["video[0].width"].toInt();
+    videoStream.height = IndexJsonData["video[0].height"].toInt();
 
-            logDebug(QString("[Parser] ✅ 解析视频流信息: 宽=%1, 高=%2, 码率=%3").arg(videoStream.width).arg(videoStream.height).arg(videoStream.bandwidth));
-        }
-    }
+    logDebug(QString("[Parser] ✅ 解析视频流信息: 宽=%1, 高=%2, 码率=%3").arg(videoStream.width).arg(videoStream.height).arg(videoStream.bandwidth));
 
-    if (jsonObj.contains("audio") && jsonObj["audio"].isArray()) {
-        QJsonArray audioArray = jsonObj["audio"].toArray();
-        if (!audioArray.isEmpty()) {
-            QJsonObject audioObj = audioArray.first().toObject();
-            audioStream.id = audioObj["id"].toInt();
-            audioStream.bandwidth = audioObj["bandwidth"].toInt();
-            audioStream.codecid = audioObj["codecid"].toInt();
-            audioStream.md5 = audioObj["md5"].toString();
-            audioStream.size = audioObj["size"].toVariant().toLongLong();
+    audioStream.id = IndexJsonData["audio[0].id"].toInt();
+    audioStream.bandwidth = IndexJsonData["audio[0].bandwidth"].toInt();
+    audioStream.codecid = IndexJsonData["audio[0].codecid"].toInt();
+    audioStream.md5 = IndexJsonData["audio[0].md5"];
+    audioStream.size = IndexJsonData["audio[0].size"].toLongLong();
 
-            logDebug(QString("[Parser] ✅ 解析音频流信息: 码率=%1, 大小=%2").arg(audioStream.bandwidth).arg(audioStream.size));
-        }
-    }
+    logDebug(QString("[Parser] ✅ 解析音频流信息: 码率=%1, 大小=%2").arg(audioStream.bandwidth).arg(audioStream.size));
 
     return true;
 }
 
-//寻找(find)媒体(Media)文件(Files),即音视频.m4s
+//寻找媒体(Media)文件(Files):找到音视频.m4s文件
 bool CacheFileParser::findMediaFiles(const QDir &dir, const QString &qualityDir, VideoInfo &info) {
     QFileInfo videoFile(dir.filePath("video.m4s"));
     QFileInfo audioFile(dir.filePath("audio.m4s"));
@@ -217,7 +271,7 @@ bool CacheFileParser::findMediaFiles(const QDir &dir, const QString &qualityDir,
     return true;
 }
 
-//获取(get)目录?(Directory)大小(Size)
+//获取(get)字段(Directory)大小(Size)
 qint64 CacheFileParser::getDirectorySize(const QDir &dir) {
     qint64 totalSize = 0;
     QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
@@ -233,18 +287,15 @@ qint64 CacheFileParser::getDirectorySize(const QDir &dir) {
     return totalSize;
 }
 
-//不是哥们？这仨语句理论上应该单独归类(或命名空间)的，毕竟好多模块都得用！
-//控制台Debug语句
+//三个控制台提示信息函数
 void CacheFileParser::logDebug(const QString &msg) {
     qDebug() << msg;
 }
 
-//控制台Warning(警告)语句
 void CacheFileParser::logWarning(const QString &msg) {
     qWarning() << msg;
 }
 
-//控制台Critical(错误)语句
 void CacheFileParser::logCritical(const QString &msg) {
     qCritical() << msg;
 }

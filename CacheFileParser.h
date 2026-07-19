@@ -80,24 +80,33 @@ public:
     CacheFileParser();  //构造函数
 
     //成员函数们
-    bool parse(const QString &folderPath, VideoInfo &outVideoInfo);
-    bool parseEntryJson(const QDir &dir, VideoInfo &info);
-    bool parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
+    bool Cathe_Parse(const QString &folderPath, VideoInfo &outVideoInfo);
     bool findMediaFiles(const QDir &dir, const QString &qualityDir, VideoInfo &info);
     qint64 getDirectorySize(const QDir &dir);
+    //解析entry.json文件函数
+    bool parseEntryJson(const QDir &dir, VideoInfo &info);
+    //解析index.json文件函数
+    bool parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
     
-    //将读取的entry.json&index.json文件信息，作为CacheFileParser成员变量
-    //这样每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好？？？
-    //获取entry.json文件信息
+    //UI(下拉菜单)访问接口函数:通过这个获取两私有容器数据(EntryJsonData、IndexJsonData,外部无法直接访问)
+    //返回const引用，外部只能读取，不能修改
+    //获取容器EntryJsonData中的entry.json文件信息
     const MetadataContainer& getEntryJsonData() const { return EntryJsonData; }
-    //获取index.json文件信息
+    //获取容器IndexJsonData中的index.json文件信息
     const MetadataContainer& getIndexJsonData() const { return IndexJsonData; }
 
 private:
+    //将entry.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
+    void EntryflattenJson(const QJsonObject &obj, const QString &prefix);
+    //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
+    void indexflattenJson(const QJsonObject &obj, const QString &prefix);
+
     void logDebug(const QString &msg);
     void logWarning(const QString &msg);
     void logCritical(const QString &msg);
 
+    //容器变量放入private(私有成员变量)
+    //使每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好
     //读取的entry.json文件信息进入该容器
     MetadataContainer EntryJsonData;
     //读取的index.json文件信息进入该容器
@@ -105,7 +114,6 @@ private:
 };
 
 #endif // CACHEFILEPARSER_H
-
 /* 260716“标准化”全部样本数据，准备修正该模块！(真坐牢！！！)
  * 1.结构体VideoInfo中的isValid() const函数的潜在Bug
  * 2.摸清结构体VideoInfo中的变量都对应了元数据文件的哪个部分？
@@ -116,3 +124,4 @@ private:
  * 【2-3-4一起解决！】
  * 4.摸清流信息结构体的作用？【队列类（分配任务）相关？】
  * 6.想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）  */
+
