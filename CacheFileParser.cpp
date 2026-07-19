@@ -63,26 +63,26 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, VideoInfo &outVideo
     return true;
 }
 
-//Entry.json展平(flatten)函数
-void CacheFileParser::EntryflattenJson(const QJsonObject &obj, const QString &prefix) {
+//递归展平JSON函数(通用辅助函数)
+void CacheFileParser::flattenJsonRecursive(const QJsonObject &obj, const QString &prefix, MetadataContainer &container) {
     for (auto it = obj.begin(); it != obj.end(); ++it) {
         QString key = prefix.isEmpty() ? it.key() : prefix + "." + it.key();
         const QJsonValue &value = it.value();
 
         if (value.isObject()) {
-            EntryflattenJson(value.toObject(), key);
+            flattenJsonRecursive(value.toObject(), key, container);
         } else if (value.isArray()) {
             QJsonArray arr = value.toArray();
             QStringList arrValues;
             for (int i = 0; i < arr.size(); ++i) {
                 if (arr[i].isObject()) {
-                    EntryflattenJson(arr[i].toObject(), key + "[" + QString::number(i) + "]");
+                    flattenJsonRecursive(arr[i].toObject(), key + "[" + QString::number(i) + "]", container);
                 } else {
                     arrValues.append(arr[i].toString());
                 }
             }
             if (!arrValues.isEmpty()) {
-                EntryJsonData[key] = arrValues.join(", ");
+                container[key] = arrValues.join(", ");
             }
         } else {
             QString strValue = value.toString();
@@ -91,13 +91,13 @@ void CacheFileParser::EntryflattenJson(const QJsonObject &obj, const QString &pr
             } else if (value.isDouble()) {
                 strValue = QString::number(value.toDouble());
             }
-            EntryJsonData[key] = strValue;
+            container[key] = strValue;
         }
     }
 }
 
-//EntryJson解析(parse)函数
-bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
+//Entry.json展平(flatten)函数:读取文件+递归展平→送入容器EntryJsonData
+bool CacheFileParser::EntryflattenJson(const QDir &dir) {
     QString entryPath = dir.filePath("entry.json");
     QFile file(entryPath);
 
@@ -113,7 +113,6 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
 
     QByteArray data = file.readAll();
     file.close();
-    info.entryJsonPath = entryPath;
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
@@ -122,7 +121,19 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     }
 
     EntryJsonData.clear();
-    EntryflattenJson(jsonDoc.object(), "");
+    flattenJsonRecursive(jsonDoc.object(), "", EntryJsonData);
+
+    logDebug(QString("[Parser] ✅ entry.json 展平完成，共 %1 个字段").arg(EntryJsonData.size()));
+    return true;
+}
+
+//EntryJson解析(parse)函数:从容器EntryJsonData读取→填入VideoInfo结构体
+bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
+    if (!EntryflattenJson(dir)) {
+        return false;
+    }
+
+    info.entryJsonPath = dir.filePath("entry.json");
 
     info.avid = EntryJsonData["avid"].toLongLong();
     info.bvid = EntryJsonData["bvid"];
@@ -164,41 +175,8 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     return true;
 }
 
-//index.json展平(flatten)函数
-void CacheFileParser::indexflattenJson(const QJsonObject &obj, const QString &prefix) {
-    for (auto it = obj.begin(); it != obj.end(); ++it) {
-        QString key = prefix.isEmpty() ? it.key() : prefix + "." + it.key();
-        const QJsonValue &value = it.value();
-
-        if (value.isObject()) {
-            indexflattenJson(value.toObject(), key);
-        } else if (value.isArray()) {
-            QJsonArray arr = value.toArray();
-            QStringList arrValues;
-            for (int i = 0; i < arr.size(); ++i) {
-                if (arr[i].isObject()) {
-                    indexflattenJson(arr[i].toObject(), key + "[" + QString::number(i) + "]");
-                } else {
-                    arrValues.append(arr[i].toString());
-                }
-            }
-            if (!arrValues.isEmpty()) {
-                IndexJsonData[key] = arrValues.join(", ");
-            }
-        } else {
-            QString strValue = value.toString();
-            if (value.isBool()) {
-                strValue = value.toBool() ? "true" : "false";
-            } else if (value.isDouble()) {
-                strValue = QString::number(value.toDouble());
-            }
-            IndexJsonData[key] = strValue;
-        }
-    }
-}
-
-//IndexJson解析(parse)函数
-bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream) {
+//index.json展平(flatten)函数:读取文件+递归展平→送入容器IndexJsonData
+bool CacheFileParser::indexflattenJson(const QDir &dir) {
     QString indexPath = dir.filePath("index.json");
     QFile file(indexPath);
 
@@ -214,7 +192,6 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
 
     QByteArray data = file.readAll();
     file.close();
-    info.indexJsonPath = indexPath;
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
@@ -223,7 +200,19 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
     }
 
     IndexJsonData.clear();
-    indexflattenJson(jsonDoc.object(), "");
+    flattenJsonRecursive(jsonDoc.object(), "", IndexJsonData);
+
+    logDebug(QString("[Parser] ✅ index.json 展平完成，共 %1 个字段").arg(IndexJsonData.size()));
+    return true;
+}
+
+//IndexJson解析(parse)函数:从容器IndexJsonData读取→填入StreamInfo结构体
+bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream) {
+    if (!indexflattenJson(dir)) {
+        return false;
+    }
+
+    info.indexJsonPath = dir.filePath("index.json");
 
     videoStream.id = IndexJsonData["video[0].id"].toInt();
     videoStream.bandwidth = IndexJsonData["video[0].bandwidth"].toInt();

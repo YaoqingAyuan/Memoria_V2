@@ -96,10 +96,12 @@ public:
     const MetadataContainer& getIndexJsonData() const { return IndexJsonData; }
 
 private:
+    //递归展平JSON函数(通用辅助函数)
+    void flattenJsonRecursive(const QJsonObject &obj, const QString &prefix, MetadataContainer &container);
     //将entry.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    void EntryflattenJson(const QJsonObject &obj, const QString &prefix);
+    bool EntryflattenJson(const QDir &dir);
     //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    void indexflattenJson(const QJsonObject &obj, const QString &prefix);
+    bool indexflattenJson(const QDir &dir);
 
     void logDebug(const QString &msg);
     void logWarning(const QString &msg);
