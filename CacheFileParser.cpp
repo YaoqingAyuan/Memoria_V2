@@ -1,19 +1,19 @@
 #include "CacheFileParser.h"
+#include "logger.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QFileInfo>
-#include <QDebug>
 
 CacheFileParser::CacheFileParser() {}
 
 //文件夹(Cathe)解析(Cathe_Parse)函数:解析文件夹(文件树结构)
 bool CacheFileParser::Cathe_Parse(const QString &folderPath, VideoInfo &outVideoInfo) {
-    logDebug(QString("[Parser] >>> 开始扫描目录: %1").arg(folderPath));
+    Logger::instance()->debug("Parser", QString(">>> 开始扫描目录: %1").arg(folderPath));
 
     QDir dir(folderPath);
     if (!dir.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：目录不存在！请检查路径配置: %1").arg(folderPath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：目录不存在！请检查路径配置: %1").arg(folderPath));
         return false;
     }
 
@@ -22,43 +22,43 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, VideoInfo &outVideo
 
     QStringList subDirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     if (subDirs.isEmpty()) {
-        logCritical("[Parser] ❌ 错误：缓存目录为空，未找到子目录");
+        Logger::instance()->critical("Parser", "❌ 错误：缓存目录为空，未找到子目录");
         return false;
     }
 
     QString contentDir = subDirs.first();
     QDir contentPath = dir.filePath(contentDir);
-    logDebug(QString("[Parser] ✅ 找到内容子目录: %1").arg(contentDir));
+    Logger::instance()->debug("Parser", QString("✅ 找到内容子目录: %1").arg(contentDir));
 
     if (!parseEntryJson(contentPath, outVideoInfo)) {
-        logCritical("[Parser] ❌ 致命错误：解析 entry.json 失败");
+        Logger::instance()->critical("Parser", "❌ 致命错误：解析 entry.json 失败");
         return false;
     }
 
     QString qualityDir = QString::number(outVideoInfo.videoQuality);
     QDir qualityPath = contentPath.filePath(qualityDir);
     if (!qualityPath.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：未找到画质目录 %1").arg(qualityDir));
+        Logger::instance()->critical("Parser", QString("❌ 错误：未找到画质目录 %1").arg(qualityDir));
         return false;
     }
 
     StreamInfo videoStream, audioStream;
     if (!parseIndexJson(qualityPath, outVideoInfo, videoStream, audioStream)) {
-        logCritical("[Parser] ❌ 致命错误：解析 index.json 失败");
+        Logger::instance()->critical("Parser", "❌ 致命错误：解析 index.json 失败");
         return false;
     }
 
     if (!findMediaFiles(qualityPath, qualityDir, outVideoInfo)) {
-        logCritical("[Parser] ❌ 致命错误：未找到视频或音频文件");
+        Logger::instance()->critical("Parser", "❌ 致命错误：未找到视频或音频文件");
         return false;
     }
 
     outVideoInfo.totalBytes = getDirectorySize(dir);
     outVideoInfo.downloadedBytes = outVideoInfo.totalBytes;
 
-    logDebug(QString("[Parser] ✅ 解析完成！视频标题: %1, AVID: %2").arg(outVideoInfo.title).arg(outVideoInfo.avid));
-    logDebug(QString("[Parser] ✅ 视频文件: %1").arg(outVideoInfo.videoFilePath));
-    logDebug(QString("[Parser] ✅ 音频文件: %1").arg(outVideoInfo.audioFilePath));
+    Logger::instance()->debug("Parser", QString("✅ 解析完成！视频标题: %1, AVID: %2").arg(outVideoInfo.title).arg(outVideoInfo.avid));
+    Logger::instance()->debug("Parser", QString("✅ 视频文件: %1").arg(outVideoInfo.videoFilePath));
+    Logger::instance()->debug("Parser", QString("✅ 音频文件: %1").arg(outVideoInfo.audioFilePath));
 
     return true;
 }
@@ -102,12 +102,12 @@ bool CacheFileParser::EntryflattenJson(const QDir &dir) {
     QFile file(entryPath);
 
     if (!file.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：entry.json 不存在: %1").arg(entryPath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：entry.json 不存在: %1").arg(entryPath));
         return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
-        logCritical(QString("[Parser] ❌ 错误：无法打开 entry.json: %1, 原因: %2").arg(entryPath).arg(file.errorString()));
+        Logger::instance()->critical("Parser", QString("❌ 错误：无法打开 entry.json: %1, 原因: %2").arg(entryPath).arg(file.errorString()));
         return false;
     }
 
@@ -116,14 +116,14 @@ bool CacheFileParser::EntryflattenJson(const QDir &dir) {
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        logCritical(QString("[Parser] ❌ 错误：entry.json 格式损坏或为空: %1").arg(entryPath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：entry.json 格式损坏或为空: %1").arg(entryPath));
         return false;
     }
 
     EntryJsonData.clear();
     flattenJsonRecursive(jsonDoc.object(), "", EntryJsonData);
 
-    logDebug(QString("[Parser] ✅ entry.json 展平完成，共 %1 个字段").arg(EntryJsonData.size()));
+    Logger::instance()->debug("Parser", QString("✅ entry.json 展平完成，共 %1 个字段").arg(EntryJsonData.size()));
     return true;
 }
 
@@ -147,29 +147,29 @@ bool CacheFileParser::parseEntryJson(const QDir &dir, VideoInfo &info) {
     info.downloadedBytes = EntryJsonData["downloaded_bytes"].toLongLong();
 
     if (info.title.isEmpty()) {
-        logWarning("[Parser] ⚠️ 警告：解析到的标题为空");
+        Logger::instance()->warning("Parser", "⚠️ 警告：解析到的标题为空");
     } else {
-        logDebug(QString("[Parser] ✅ 成功解析视频标题: %1").arg(info.title));
+        Logger::instance()->debug("Parser", QString("✅ 成功解析视频标题: %1").arg(info.title));
     }
 
     if (info.avid == 0) {
-        logWarning("[Parser] ⚠️ 警告：解析到的 AVID 为空");
+        Logger::instance()->warning("Parser", "⚠️ 警告：解析到的 AVID 为空");
     } else {
-        logDebug(QString("[Parser] ✅ 成功解析 AVID: %1").arg(info.avid));
+        Logger::instance()->debug("Parser", QString("✅ 成功解析 AVID: %1").arg(info.avid));
     }
 
-    info.pageData.cid = EntryJsonData["page_data.cid"].toLongLong();
-    info.pageData.page = EntryJsonData["page_data.page"].toInt();
-    info.pageData.partTitle = EntryJsonData["page_data.part"];
-    info.pageData.link = EntryJsonData["page_data.link"];
-    info.pageData.width = EntryJsonData["page_data.width"].toInt();
-    info.pageData.height = EntryJsonData["page_data.height"].toInt();
-    info.pageData.rotate = EntryJsonData["page_data.rotate"].toInt();
+    info.page_ep_Data.cid = EntryJsonData["page_data.cid"].toLongLong();
+    info.page_ep_Data.page = EntryJsonData["page_data.page"].toInt();
+    info.page_ep_Data.partTitle = EntryJsonData["page_data.part"];
+    info.page_ep_Data.link = EntryJsonData["page_data.link"];
+    info.page_ep_Data.width = EntryJsonData["page_data.width"].toInt();
+    info.page_ep_Data.height = EntryJsonData["page_data.height"].toInt();
+    info.page_ep_Data.rotate = EntryJsonData["page_data.rotate"].toInt();
 
     if (!EntryJsonData.contains("page_data.cid")) {
-        logWarning("[Parser] ⚠️ 警告：未找到 page_data 字段");
+        Logger::instance()->warning("Parser", "⚠️ 警告：未找到 page_data 字段");
     } else {
-        logDebug(QString("[Parser] ✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(info.pageData.cid).arg(info.pageData.width).arg(info.pageData.height));
+        Logger::instance()->debug("Parser", QString("✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(info.page_ep_Data.cid).arg(info.page_ep_Data.width).arg(info.page_ep_Data.height));
     }
 
     return true;
@@ -181,12 +181,12 @@ bool CacheFileParser::indexflattenJson(const QDir &dir) {
     QFile file(indexPath);
 
     if (!file.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：index.json 不存在: %1").arg(indexPath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：index.json 不存在: %1").arg(indexPath));
         return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
-        logCritical(QString("[Parser] ❌ 错误：无法打开 index.json: %1, 原因: %2").arg(indexPath).arg(file.errorString()));
+        Logger::instance()->critical("Parser", QString("❌ 错误：无法打开 index.json: %1, 原因: %2").arg(indexPath).arg(file.errorString()));
         return false;
     }
 
@@ -195,14 +195,14 @@ bool CacheFileParser::indexflattenJson(const QDir &dir) {
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        logCritical(QString("[Parser] ❌ 错误：index.json 格式损坏或为空: %1").arg(indexPath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：index.json 格式损坏或为空: %1").arg(indexPath));
         return false;
     }
 
     IndexJsonData.clear();
     flattenJsonRecursive(jsonDoc.object(), "", IndexJsonData);
 
-    logDebug(QString("[Parser] ✅ index.json 展平完成，共 %1 个字段").arg(IndexJsonData.size()));
+    Logger::instance()->debug("Parser", QString("✅ index.json 展平完成，共 %1 个字段").arg(IndexJsonData.size()));
     return true;
 }
 
@@ -223,7 +223,7 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
     videoStream.width = IndexJsonData["video[0].width"].toInt();
     videoStream.height = IndexJsonData["video[0].height"].toInt();
 
-    logDebug(QString("[Parser] ✅ 解析视频流信息: 宽=%1, 高=%2, 码率=%3").arg(videoStream.width).arg(videoStream.height).arg(videoStream.bandwidth));
+    Logger::instance()->debug("Parser", QString("✅ 解析视频流信息: 宽=%1, 高=%2, 码率=%3").arg(videoStream.width).arg(videoStream.height).arg(videoStream.bandwidth));
 
     audioStream.id = IndexJsonData["audio[0].id"].toInt();
     audioStream.bandwidth = IndexJsonData["audio[0].bandwidth"].toInt();
@@ -231,7 +231,7 @@ bool CacheFileParser::parseIndexJson(const QDir &dir, VideoInfo &info, StreamInf
     audioStream.md5 = IndexJsonData["audio[0].md5"];
     audioStream.size = IndexJsonData["audio[0].size"].toLongLong();
 
-    logDebug(QString("[Parser] ✅ 解析音频流信息: 码率=%1, 大小=%2").arg(audioStream.bandwidth).arg(audioStream.size));
+    Logger::instance()->debug("Parser", QString("✅ 解析音频流信息: 码率=%1, 大小=%2").arg(audioStream.bandwidth).arg(audioStream.size));
 
     return true;
 }
@@ -242,20 +242,20 @@ bool CacheFileParser::findMediaFiles(const QDir &dir, const QString &qualityDir,
     QFileInfo audioFile(dir.filePath("audio.m4s"));
 
     if (!videoFile.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：video.m4s 文件不存在: %1").arg(videoFile.absoluteFilePath()));
+        Logger::instance()->critical("Parser", QString("❌ 错误：video.m4s 文件不存在: %1").arg(videoFile.absoluteFilePath()));
         return false;
     }
 
     if (!audioFile.exists()) {
-        logCritical(QString("[Parser] ❌ 错误：audio.m4s 文件不存在: %1").arg(audioFile.absoluteFilePath()));
+        Logger::instance()->critical("Parser", QString("❌ 错误：audio.m4s 文件不存在: %1").arg(audioFile.absoluteFilePath()));
         return false;
     }
 
     info.videoFilePath = videoFile.absoluteFilePath();
     info.audioFilePath = audioFile.absoluteFilePath();
 
-    logDebug(QString("[Parser] ✅ 找到视频文件: %1").arg(info.videoFilePath));
-    logDebug(QString("[Parser] ✅ 找到音频文件: %1").arg(info.audioFilePath));
+    Logger::instance()->debug("Parser", QString("✅ 找到视频文件: %1").arg(info.videoFilePath));
+    Logger::instance()->debug("Parser", QString("✅ 找到音频文件: %1").arg(info.audioFilePath));
 
     return true;
 }
@@ -274,17 +274,4 @@ qint64 CacheFileParser::getDirectorySize(const QDir &dir) {
     }
 
     return totalSize;
-}
-
-//三个控制台提示信息函数
-void CacheFileParser::logDebug(const QString &msg) {
-    qDebug() << msg;
-}
-
-void CacheFileParser::logWarning(const QString &msg) {
-    qWarning() << msg;
-}
-
-void CacheFileParser::logCritical(const QString &msg) {
-    qCritical() << msg;
 }

@@ -34,7 +34,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         utils.h
         CacheFileParser.h CacheFileParser.cpp
 
-
+        logger.h logger.cpp
 
     )
 # Define target properties for Android with Qt 6 as:

@@ -16,30 +16,37 @@ typedef QMap<QString, QString> MetadataContainer;
 //★标为重要变量:人家出错，将会让主要功能“报废”(至于表格中其他的，空的时候填写“空”、找不到的时候填写“NULL”即可)
 //其他的无关变量存储在容器rawMetadata中，大部分用不上,“右键-查看元数据”后才会“展示”
 struct VideoInfo {
-    qint64 avid;        //视频Av号【Bv号还会绑Av？】
-    QString bvid;       //视频Bv号
-    QString title;      //★视频标题(重要,命名输出文件)
-    QString ownerName;  //Up主昵称
-    QString coverUrl;   //封面链接(应该用不着吧？)
-    int videoQuality;   //视频质量
-    QString qualityDescription;     //质量描述？
-    qint64 totalTimeMilli;          //视频总时间？
-    qint64 totalBytes;              //视频总大小(估计)
-    qint64 downloadedBytes;         //下载的比特数
+    qint64 avid;        //对应字段“avid”:缓存离线诊断ID（原始文件夹命名）
+    QString bvid;       //对应字段“bvid”,视频网页(Av)Bv号
+    QString title;      //★对应字段“owner_name”:视频标题
+                        //(重要!读不到的话需用户UI界面自定义or调用默认哈希值标题)
+    QString ownerName;  //对应字段“owner_name”:Up主昵称
+    QString ownerId;    //对应字段“owner_id”:Up主账号UID
+    QString coverUrl;   //对应字段“cover”:封面链接(应该用不着吧？)
+    int videoQuality;   //对应字段“video_quality”:视频质量代码
+                        //小心！如果4K等其他分辨率的代码不是数字，类型要改为QString
+    QString qualityDescription;     //对应字段“quality_pithy_description”:质量描述
+    qint64 totalTimeMilli;          //对应字段“total_time_milli”:视频总时长(单位:毫秒)
+    qint64 totalBytes;              //对应字段“total_bytes”:视频总大小(单位:比特)
+    qint64 downloadedBytes;         //对应字段“downloaded_bytes”:下载的比特数
+    //还可以加上弹幕数量以及缓存时间
 
     //内部结构体结构声明
-    struct PageData {       //Page字段数据
-        qint64 cid;         //视频Cid号(多P视频的标识)
-        int page;           //P数(第几P视频)
-        QString partTitle;  //P标题
-        QString link;       //视频的链接？【应该是Page字段的】
-        int width;          //视频宽度
-        int height;         //视频高度
-        int rotate;         //旋转角度
+    struct PageData {       //Page_Data字段数据与ep(番剧)字段同构
+        qint64 cid;         //PageData字段“cid”:视频Cid号(多P视频的标识)
+                            //ep字段“episode_id”:ID标识
+        int page;           //PageData字段“page”:P数(第几P视频)、ep字段字段“index”
+        QString partTitle;  //PageData字段“part”:P标题(单P视频为自动生成lv_0_时间戳)
+                            //ep字段“index_title”
+        QString link;       //PageData字段“link”:站APP内部跳转链接，使用B站私有协议,用于APP内直接唤起视频播放页【感觉可以不要这个】
+                            //ep字段同
+        int width;          //PageData字段“width”:视频宽度、ep字段同
+        int height;         //PageData字段“height”:视频高度、ep字段同
+        int rotate;         //PageData字段“rotate”:旋转角度、ep字段同
     };
-    PageData pageData;      //声明:VideoInfo里面有个PageData结构体
+    PageData page_ep_Data;  //声明:VideoInfo里面有个PageData结构体
 
-    QString cacheRootPath;  //缓存root路径？
+    QString cacheRootPath;  //缓存文件路径
     QString entryJsonPath;  //★entry.Json文件路径
     QString indexJsonPath;  //index.Json文件路径
     QString videoFilePath;  //★视频文件路径
@@ -61,16 +68,16 @@ struct VideoInfo {
      */
 };
 
-//结构体：流(Stream)信息(Infor-mation)
+//结构体：流(Stream)信息(Infor-mation),来自文件index.Json,音视频独立
 struct StreamInfo {
-    int id;             //视频ID
-    int bandwidth;      //带宽？
-    int codecid;        //视频Cid号
-    QString md5;        //Md5值
-    qint64 size;        //大小
-    QString FrameRate;  //帧率
-    int width;          //视频宽度
-    int height;         //视频高度
+    int id;             //对应字段“id”
+    int bandwidth;      //对应字段“bandwidth”
+    int codecid;        //对应字段“codecid”
+    QString md5;        //对应字段“md5”:Md5值
+    qint64 size;        //对应字段“size”:大小(单位:比特)
+    QString FrameRate;  //对应字段“frame_rate”:帧率
+    int width;          //对应字段“width”视频宽度(音频是0)
+    int height;         //对应字段“height”视频高度(音频是0)
 };
 
 //类声明
@@ -103,9 +110,6 @@ private:
     //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
     bool indexflattenJson(const QDir &dir);
 
-    void logDebug(const QString &msg);
-    void logWarning(const QString &msg);
-    void logCritical(const QString &msg);
 
     //容器变量放入private(私有成员变量)
     //使每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好
@@ -116,12 +120,16 @@ private:
 };
 
 #endif // CACHEFILEPARSER_H
-/* 260719 概述：基本函数模块已完成“铺排”，准备重设工作流
+/* 260720 概述：构建“日志”类，独立出去；准备重设工作流
+ * 新问题：如何兼容番剧类型？
  * 依然存在的问题：
  * 1.结构体VideoInfo中的isValid() const函数的潜在Bug【测试了再修也不迟】
  * 2.缓存解析函数、两Json展平函数、~~~~解析函数三大模块需整理“工作流”(减少嵌套调用)
  * 3.最终目的以“两容器收拢‘标准化’展平原始数据、两个结构体‘聚拢’表格UI数据”
  * 4.考虑是否该把“关键数据”判定【判定为不完整不得入“队列”】
  * 5.摸清流信息结构体的作用？【确认与队列类（分配任务）相关，但细节未定】
- * 6.想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）  */
+ *
+ * 【已解决】想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）
+ * 后续看一看该模块内部各函数是什么意思？
+ */
 
