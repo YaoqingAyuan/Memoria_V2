@@ -88,12 +88,12 @@ public:
 
     //成员函数们
     bool Cathe_Parse(const QString &folderPath, VideoInfo &outVideoInfo);
-    bool findMediaFiles(const QDir &dir, const QString &qualityDir, VideoInfo &info);
+    bool findMediaFiles(const QString &dirPath, VideoInfo &info);
     qint64 getDirectorySize(const QDir &dir);
-    //解析entry.json文件函数
-    bool parseEntryJson(const QDir &dir, VideoInfo &info);
-    //解析index.json文件函数
-    bool parseIndexJson(const QDir &dir, VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
+    //解析entry.json文件函数：从容器EntryJsonData读取数据填入VideoInfo结构体
+    bool parseEntryJson(VideoInfo &info);
+    //解析index.json文件函数：从容器IndexJsonData读取数据填入StreamInfo结构体
+    bool parseIndexJson(VideoInfo &info, StreamInfo &videoStream, StreamInfo &audioStream);
     
     //UI(下拉菜单)访问接口函数:通过这个获取两私有容器数据(EntryJsonData、IndexJsonData,外部无法直接访问)
     //返回const引用，外部只能读取，不能修改
@@ -106,13 +106,12 @@ private:
     //递归展平JSON函数(通用辅助函数)
     void flattenJsonRecursive(const QJsonObject &obj, const QString &prefix, MetadataContainer &container);
     //将entry.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool EntryflattenJson(const QDir &dir);
+    bool EntryflattenJson(const QString &filePath);
     //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool indexflattenJson(const QDir &dir);
+    bool indexflattenJson(const QString &filePath);
 
 
-    //容器变量放入private(私有成员变量)
-    //使每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好
+    //容器变量放入(私有成员变量),使每个解析器实例都有独立数据容器:支持并行解析多个文件夹、线程安全、测试友好
     //读取的entry.json文件信息进入该容器
     MetadataContainer EntryJsonData;
     //读取的index.json文件信息进入该容器
@@ -124,11 +123,12 @@ private:
  * 新问题：如何兼容番剧类型？
  * 依然存在的问题：
  * 1.结构体VideoInfo中的isValid() const函数的潜在Bug【测试了再修也不迟】
- * 2.缓存解析函数、两Json展平函数、~~~~解析函数三大模块需整理“工作流”(减少嵌套调用)
- * 3.最终目的以“两容器收拢‘标准化’展平原始数据、两个结构体‘聚拢’表格UI数据”
- * 4.考虑是否该把“关键数据”判定【判定为不完整不得入“队列”】
- * 5.摸清流信息结构体的作用？【确认与队列类（分配任务）相关，但细节未定】
- *
+ * 2.考虑是否该把“关键数据”判定【判定为不完整不得入“任务队列”】
+ * 3.摸清流信息结构体的作用？【确认与队列类（分配任务）相关，但细节未定】
+ * 4.还有一个疑虑:当初将EntryJsonData与IndexJsonData放入私有变量中，就是为了使每个解析器实例都有独立数据容器
+ * 然后VideoInfo与StreamInfo是否也应是一样的逻辑？【毕竟后面这些数据要与.m4s入“队列”，这么做不好吧？】
+ * 【已解决】缓存解析函数、两Json展平函数、~~~~解析函数三大模块需整理“工作流”
+ * 制作简单的字符画思维导图；然后看看函数内部的运作机理
  * 【已解决】想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）
  * 后续看一看该模块内部各函数是什么意思？
  */
