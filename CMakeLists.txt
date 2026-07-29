@@ -29,7 +29,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
 
         FFmpeg_module.h FFmpeg_module.cpp
 
-        DatabaseManager.h DatabaseManager.cpp
+        ParsedCacheData.h ParsedCacheData.cpp
         TaskQueue.h TaskQueue.cpp
         utils.h
         CacheFileParser.h CacheFileParser.cpp
