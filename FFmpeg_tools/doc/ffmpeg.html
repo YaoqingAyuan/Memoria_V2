@@ -1470,6 +1470,47 @@ also possible to delete metadata by using an empty value.
 </pre></div>
 
 </dd>
+<dt><samp class="option">-keep_metadata[:<var class="var">metadata_specifier</var>] <var class="var">key</var> (<em class="emph">output,per-metadata</em>)</samp></dt>
+<dd><p>When re-encoding a stream, certain metadata keys that are likely to become stale
+(such as <code class="code">iTunSMPB</code> or <code class="code">encoded_by</code>) are automatically discarded.
+This option prevents a specific key from being discarded, preserving its original
+value from the input.
+</p>
+<p>Without a specifier, the key is preserved in all metadata contexts (format and
+streams). Use <code class="code">g</code> to restrict to format (global) metadata, or <code class="code">s</code> with
+an optional stream specifier to restrict to matching streams only.
+</p>
+<p>For example, to keep <code class="code">iTunSMPB</code> in format metadata only when re-encoding:
+</p><div class="example">
+<pre class="example-preformatted">ffmpeg -i in.mp3 -keep_metadata:g iTunSMPB out.mp3
+</pre></div>
+
+<p>To keep <code class="code">NUMBER_OF_BYTES</code> only for the video stream:
+</p><div class="example">
+<pre class="example-preformatted">ffmpeg -i in.mkv -keep_metadata:s:v NUMBER_OF_BYTES out.mkv
+</pre></div>
+
+<p>Some keys are stored in the metadata with a suffix (e.g.
+<code class="code">NUMBER_OF_BYTES-eng</code>). Specifying the unsuffixed family name (e.g.
+<code class="code">NUMBER_OF_BYTES</code>) keeps all variants. To keep only a specific one,
+specify the full key explicitly:
+</p><div class="example">
+<pre class="example-preformatted">ffmpeg -i in.mkv -keep_metadata:s:v NUMBER_OF_BYTES-eng out.mkv
+</pre></div>
+
+<p>Some (such as <code class="code">major_brand</code>, <code class="code">minor_version</code>, and
+<code class="code">compatible_brands</code>) are always removed regardless of re-encoding, because
+they describe the source container and are meaningless in the output.
+<code class="code">-keep_metadata</code> applies to those keys even when stream-copying.
+</p>
+<p>Re-encoding-only keys (such as encoder tags and Matroska stream statistics) are
+removed from a stream&rsquo;s metadata only when that stream is being re-encoded, and
+from format metadata only when at least one audio or video stream is re-encoded.
+</p>
+<p>Only format and stream metadata are filtered. Chapter and program metadata
+are never modified by this mechanism.
+</p>
+</dd>
 <dt><samp class="option">-disposition[:stream_specifier] <var class="var">value</var> (<em class="emph">output,per-stream</em>)</samp></dt>
 <dd><p>Sets the disposition flags for a stream.
 </p>

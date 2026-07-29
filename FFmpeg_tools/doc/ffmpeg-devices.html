@@ -251,8 +251,10 @@ card id 0, you may run the command:
 <dd><p>Set the sample rate in Hz. Default is 48000.
 </p>
 </dd>
-<dt><samp class="option">channels</samp></dt>
-<dd><p>Set the number of channels. Default is 2.
+<dt><samp class="option">ch_layout</samp></dt>
+<dd><p>Set the channel layout. When unset, the layout defaults to stereo, or to the
+minimum channel count supported by the device, and is filled in from the ALSA
+channel map on a best-effort basis.
 </p>
 </dd>
 </dl>
