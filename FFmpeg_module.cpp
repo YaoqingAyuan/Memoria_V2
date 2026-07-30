@@ -97,16 +97,36 @@ QString FFmpeg_module::selfCheck() {
         }
     }
 
-    //策略2：使用软件自带的FFmpeg(位于程序运行目录的FFmpeg_tools/bin/下)
+    //策略2：使用软件自带的FFmpeg(位于程序运行目录或项目根目录的FFmpeg_tools/bin/下)
     QString appDir = QCoreApplication::applicationDirPath();
-    QString bundledPath = QDir(appDir).filePath("FFmpeg_tools/bin/ffmpeg.exe");
-    QFileInfo fi(bundledPath);
-    if (fi.exists() && fi.isExecutable()) {
-        m_ffmpegPath = bundledPath;
-        Logger::instance()->debug("FFmpeg", QString("✅ 使用软件自带FFmpeg: %1").arg(m_ffmpegPath));
-    } else {
+    QStringList searchPaths;
+    searchPaths << QDir(appDir).filePath("FFmpeg_tools/bin/ffmpeg.exe");
+
+    //开发环境适配：exe在build/.../子目录中，向上回溯查找项目根目录下的FFmpeg_tools
+    QDir currentDir(appDir);
+    for (int i = 0; i < 4; ++i) {
+        if (!currentDir.cdUp()) break;
+        QString candidate = currentDir.filePath("FFmpeg_tools/bin/ffmpeg.exe");
+        if (!searchPaths.contains(candidate)) {
+            searchPaths << candidate;
+        }
+    }
+
+    //遍历候选路径，使用第一个存在的
+    bool foundBundled = false;
+    for (const QString &candidate : searchPaths) {
+        QFileInfo fi(candidate);
+        if (fi.exists() && fi.isExecutable()) {
+            m_ffmpegPath = candidate;
+            Logger::instance()->debug("FFmpeg", QString("✅ 使用软件自带FFmpeg: %1").arg(m_ffmpegPath));
+            foundBundled = true;
+            break;
+        }
+    }
+
+    if (!foundBundled) {
         Logger::instance()->critical("FFmpeg",
-            QString("❌ 致命错误：未找到FFmpeg环境！自带路径不存在: %1").arg(bundledPath));
+            QString("❌ 致命错误：未找到FFmpeg环境！自带路径不存在: %1").arg(searchPaths.join(" / ")));
         m_ffmpegPath.clear();
     }
 

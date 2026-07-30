@@ -19,7 +19,7 @@
 // 输出：D:/Memoria_OutputTest/<视频标题>.mp4(标题取自 VideoInfo.title)
 // 注：日志通过 Logger(qDebug) 输出，Qt Creator 中查看"应用程序输出"面板
 // ============================================================================
-#define TEST_CLOSED_LOOP
+//#define TEST_CLOSED_LOOP
 
 int main(int argc, char *argv[])
 {
