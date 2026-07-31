@@ -26,7 +26,7 @@ void MainWindow::on_OutputPath_Btn_clicked()
 }
 
 
-void MainWindow::on_VedioPath_Btn_clicked()
+void MainWindow::on_VideoPath_Btn_clicked()
 {
 
 }
@@ -51,6 +51,24 @@ void MainWindow::on_DeleteLine_Btn_clicked()
 
 
 void MainWindow::on_Setting_Btn_clicked()
+{
+
+}
+
+
+void MainWindow::on_Link_Input_Btn_clicked()
+{
+
+}
+
+
+void MainWindow::on_WLAN_Input_Btn_clicked()
+{
+
+}
+
+
+void MainWindow::on_LocalCache_Btn_clicked()
 {
 
 }

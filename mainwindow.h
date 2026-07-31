@@ -22,7 +22,7 @@ private slots:
 
     void on_OutputPath_Btn_clicked();
 
-    void on_VedioPath_Btn_clicked();
+    void on_VideoPath_Btn_clicked();
 
     void on_AudioPath_Btn_clicked();
 
@@ -31,6 +31,12 @@ private slots:
     void on_DeleteLine_Btn_clicked();
 
     void on_Setting_Btn_clicked();
+
+    void on_Link_Input_Btn_clicked();
+
+    void on_WLAN_Input_Btn_clicked();
+
+    void on_LocalCache_Btn_clicked();
 
 private:
     Ui::MainWindow *ui;

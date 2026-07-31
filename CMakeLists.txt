@@ -35,6 +35,12 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         CacheFileParser.h CacheFileParser.cpp
 
         logger.h logger.cpp
+        Secondary_UI/Output_Setting_Dlog.h Secondary_UI/Output_Setting_Dlog.cpp Secondary_UI/Output_Setting_Dlog.ui
+        Secondary_UI/VideoPlayback_Weight.h Secondary_UI/VideoPlayback_Weight.cpp Secondary_UI/VideoPlayback_Weight.ui
+        Secondary_UI/Independ_Import_Dialog.h Secondary_UI/Independ_Iimport_Dialog.cpp Secondary_UI/Independ_Import_Dialog.ui
+        Secondary_UI/Link_Input_Weight.h Secondary_UI/Link_Input_Weight.cpp Secondary_UI/Link_Input_Weight.ui
+        Secondary_UI/WLAN_Input_Weight.h Secondary_UI/WLAN_Input_Weight.cpp Secondary_UI/WLAN_Input_Weight.ui
+
 
     )
 # Define target properties for Android with Qt 6 as:
