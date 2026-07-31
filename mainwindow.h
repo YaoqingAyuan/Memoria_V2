@@ -17,6 +17,21 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
+private slots:
+    void on_OutputBtn_clicked();
+
+    void on_OutputPath_Btn_clicked();
+
+    void on_VedioPath_Btn_clicked();
+
+    void on_AudioPath_Btn_clicked();
+
+    void on_PlusLine_Btn_clicked();
+
+    void on_DeleteLine_Btn_clicked();
+
+    void on_Setting_Btn_clicked();
+
 private:
     Ui::MainWindow *ui;
 };
