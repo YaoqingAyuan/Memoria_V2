@@ -16,11 +16,16 @@
   <widget class="QLabel" name="AudioPath">
    <property name="geometry">
     <rect>
-     <x>120</x>
+     <x>106</x>
      <y>100</y>
      <width>71</width>
      <height>28</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>11</pointsize>
+    </font>
    </property>
    <property name="text">
     <string>音频路径:</string>
@@ -29,7 +34,7 @@
   <widget class="QLineEdit" name="AudioPath_Edit">
    <property name="geometry">
     <rect>
-     <x>192</x>
+     <x>178</x>
      <y>100</y>
      <width>301</width>
      <height>28</height>
@@ -39,7 +44,7 @@
   <widget class="QLineEdit" name="VideoPath_Edit">
    <property name="geometry">
     <rect>
-     <x>192</x>
+     <x>178</x>
      <y>130</y>
      <width>301</width>
      <height>28</height>
@@ -49,7 +54,7 @@
   <widget class="QPushButton" name="AudioPath_Btn">
    <property name="geometry">
     <rect>
-     <x>490</x>
+     <x>479</x>
      <y>100</y>
      <width>99</width>
      <height>28</height>
@@ -62,11 +67,16 @@
   <widget class="QLabel" name="VideoPath">
    <property name="geometry">
     <rect>
-     <x>120</x>
+     <x>106</x>
      <y>130</y>
      <width>71</width>
      <height>28</height>
     </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>11</pointsize>
+    </font>
    </property>
    <property name="text">
     <string>视频路径:</string>
@@ -75,7 +85,7 @@
   <widget class="QPushButton" name="VideoPath_Btn">
    <property name="geometry">
     <rect>
-     <x>490</x>
+     <x>479</x>
      <y>130</y>
      <width>99</width>
      <height>28</height>
@@ -83,6 +93,34 @@
    </property>
    <property name="text">
     <string>浏览…</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="VideoPath_2">
+   <property name="geometry">
+    <rect>
+     <x>106</x>
+     <y>160</y>
+     <width>71</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>11</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>输入标题：</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="VideoPath_Edit_2">
+   <property name="geometry">
+    <rect>
+     <x>178</x>
+     <y>160</y>
+     <width>301</width>
+     <height>28</height>
+    </rect>
    </property>
   </widget>
  </widget>
