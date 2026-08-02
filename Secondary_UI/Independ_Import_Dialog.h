@@ -16,6 +16,15 @@ public:
     explicit Independ_Import_Dialog(QWidget *parent = nullptr);
     ~Independ_Import_Dialog();
 
+private slots:
+    void on_AudioPath_Btn_clicked();
+
+    void on_VideoPath_Btn_clicked();
+
+    void on_Center_Btn_clicked();
+
+    void on_Cancel_Btn_clicked();
+
 private:
     Ui::Independ_Import_Dialog *ui;
 };

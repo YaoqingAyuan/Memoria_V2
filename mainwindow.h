@@ -19,23 +19,13 @@ public:
 
 private slots:
     void on_OutputBtn_clicked();
-
     void on_OutputPath_Btn_clicked();
-
-    void on_VideoPath_Btn_clicked();
-
-    void on_AudioPath_Btn_clicked();
-
     void on_PlusLine_Btn_clicked();
-
     void on_DeleteLine_Btn_clicked();
-
+    void on_IndepImport_Btn_clicked();
     void on_Setting_Btn_clicked();
-
     void on_Link_Input_Btn_clicked();
-
     void on_WLAN_Input_Btn_clicked();
-
     void on_LocalCache_Btn_clicked();
 
 private:

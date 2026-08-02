@@ -6,123 +6,300 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>675</width>
-    <height>333</height>
+    <width>563</width>
+    <height>286</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>独立音视频导入</string>
   </property>
-  <widget class="QLabel" name="AudioPath">
-   <property name="geometry">
-    <rect>
-     <x>106</x>
-     <y>100</y>
-     <width>71</width>
-     <height>28</height>
-    </rect>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>18</number>
    </property>
-   <property name="font">
-    <font>
-     <pointsize>11</pointsize>
-    </font>
+   <property name="leftMargin">
+    <number>24</number>
    </property>
-   <property name="text">
-    <string>音频路径:</string>
+   <property name="topMargin">
+    <number>28</number>
    </property>
-  </widget>
-  <widget class="QLineEdit" name="AudioPath_Edit">
-   <property name="geometry">
-    <rect>
-     <x>178</x>
-     <y>100</y>
-     <width>301</width>
-     <height>28</height>
-    </rect>
+   <property name="rightMargin">
+    <number>24</number>
    </property>
-  </widget>
-  <widget class="QLineEdit" name="VideoPath_Edit">
-   <property name="geometry">
-    <rect>
-     <x>178</x>
-     <y>130</y>
-     <width>301</width>
-     <height>28</height>
-    </rect>
+   <property name="bottomMargin">
+    <number>24</number>
    </property>
-  </widget>
-  <widget class="QPushButton" name="AudioPath_Btn">
-   <property name="geometry">
-    <rect>
-     <x>479</x>
-     <y>100</y>
-     <width>99</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>浏览…</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="VideoPath">
-   <property name="geometry">
-    <rect>
-     <x>106</x>
-     <y>130</y>
-     <width>71</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <pointsize>11</pointsize>
-    </font>
-   </property>
-   <property name="text">
-    <string>视频路径:</string>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="VideoPath_Btn">
-   <property name="geometry">
-    <rect>
-     <x>479</x>
-     <y>130</y>
-     <width>99</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>浏览…</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="VideoPath_2">
-   <property name="geometry">
-    <rect>
-     <x>106</x>
-     <y>160</y>
-     <width>71</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="font">
-    <font>
-     <pointsize>11</pointsize>
-    </font>
-   </property>
-   <property name="text">
-    <string>输入标题：</string>
-   </property>
-  </widget>
-  <widget class="QLineEdit" name="VideoPath_Edit_2">
-   <property name="geometry">
-    <rect>
-     <x>178</x>
-     <y>160</y>
-     <width>301</width>
-     <height>28</height>
-    </rect>
-   </property>
-  </widget>
+   <item>
+    <layout class="QVBoxLayout" name="inputGroup">
+     <property name="spacing">
+      <number>16</number>
+     </property>
+     <item>
+      <layout class="QHBoxLayout" name="audioRow">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="AudioPath">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>72</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="font">
+          <font>
+           <pointsize>10</pointsize>
+          </font>
+         </property>
+         <property name="text">
+          <string>音频路径:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="AudioPath_Edit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="AudioPath_Btn">
+         <property name="minimumSize">
+          <size>
+           <width>80</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>浏览…</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="videoRow">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="VideoPath">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>72</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="font">
+          <font>
+           <pointsize>10</pointsize>
+          </font>
+         </property>
+         <property name="text">
+          <string>视频路径:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="VideoPath_Edit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="VideoPath_Btn">
+         <property name="minimumSize">
+          <size>
+           <width>80</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>浏览…</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="titleRow">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="VideoPath_2">
+         <property name="minimumSize">
+          <size>
+           <width>72</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>72</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="font">
+          <font>
+           <pointsize>10</pointsize>
+          </font>
+         </property>
+         <property name="text">
+          <string>输入标题：</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="Title_Edit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="placeholderText">
+          <string>留空则使用默认标题（哈希值+日期）</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="separator">
+     <property name="frameShape">
+      <enum>QFrame::Shape::HLine</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Shadow::Sunken</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonRow">
+     <property name="spacing">
+      <number>16</number>
+     </property>
+     <item>
+      <spacer name="buttonLeftSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="Center_Btn">
+       <property name="minimumSize">
+        <size>
+         <width>96</width>
+         <height>32</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>96</width>
+         <height>32</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>确定</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="Cancel_Btn">
+       <property name="minimumSize">
+        <size>
+         <width>96</width>
+         <height>32</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>96</width>
+         <height>32</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>取消</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>
