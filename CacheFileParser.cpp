@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QFileInfo>
+#include <cmath>
 
 /* ============================================================
  *  CacheFileParser 成员函数工作流（字符画）
@@ -143,7 +144,13 @@ void CacheFileParser::flattenJsonRecursive(const QJsonObject &obj, const QString
             if (value.isBool()) {
                 strValue = value.toBool() ? "true" : "false";
             } else if (value.isDouble()) {
-                strValue = QString::number(value.toDouble());
+                double d = value.toDouble();
+                //整数值使用qint64转换，避免大整数(如avid)被转为科学计数法导致精度丢失
+                if (d >= -9.2233720368547758e18 && d <= 9.2233720368547758e18 && d == std::floor(d)) {
+                    strValue = QString::number(static_cast<qint64>(d));
+                } else {
+                    strValue = QString::number(d);
+                }
             }
             container[key] = strValue;
         }
@@ -186,17 +193,34 @@ bool CacheFileParser::parseEntryJson(ParsedCacheData &data) {
     data.videoInfo.bvid = data.entryJsonData["bvid"];
     data.videoInfo.title = data.entryJsonData["title"];
     data.videoInfo.ownerName = data.entryJsonData["owner_name"];
+    data.videoInfo.ownerId = data.entryJsonData["owner_id"];
     data.videoInfo.coverUrl = data.entryJsonData["cover"];
     data.videoInfo.videoQuality = data.entryJsonData["video_quality"].toInt();
     data.videoInfo.qualityDescription = data.entryJsonData["quality_pithy_description"];
     data.videoInfo.totalTimeMilli = data.entryJsonData["total_time_milli"].toLongLong();
-    data.videoInfo.page_ep_Data.cid = data.entryJsonData["page_data.cid"].toLongLong();
-    data.videoInfo.page_ep_Data.page = data.entryJsonData["page_data.page"].toInt();
-    data.videoInfo.page_ep_Data.partTitle = data.entryJsonData["page_data.part"];
-    data.videoInfo.page_ep_Data.link = data.entryJsonData["page_data.link"];
-    data.videoInfo.page_ep_Data.width = data.entryJsonData["page_data.width"].toInt();
-    data.videoInfo.page_ep_Data.height = data.entryJsonData["page_data.height"].toInt();
-    data.videoInfo.page_ep_Data.rotate = data.entryJsonData["page_data.rotate"].toInt();
+    data.videoInfo.create_timestamp = data.entryJsonData["time_create_stamp"].toLongLong();
+    data.videoInfo.recent_danmaku_count = data.entryJsonData["danmaku_count"].toInt();
+
+    //解析页面/分集数据(兼容普通视频page_data与番剧ep两种结构)
+    if (data.entryJsonData.contains("page_data.cid")) {
+        //普通视频：从page_data读取
+        data.videoInfo.page_ep_Data.cid = data.entryJsonData["page_data.cid"].toLongLong();
+        data.videoInfo.page_ep_Data.page = data.entryJsonData["page_data.page"].toInt();
+        data.videoInfo.page_ep_Data.partTitle = data.entryJsonData["page_data.part"];
+        data.videoInfo.page_ep_Data.link = data.entryJsonData["page_data.link"];
+        data.videoInfo.page_ep_Data.width = data.entryJsonData["page_data.width"].toInt();
+        data.videoInfo.page_ep_Data.height = data.entryJsonData["page_data.height"].toInt();
+        data.videoInfo.page_ep_Data.rotate = data.entryJsonData["page_data.rotate"].toInt();
+    } else if (data.entryJsonData.contains("ep.danmaku")) {
+        //番剧：从ep读取(cid对应ep.danmaku，page对应ep.index，partTitle对应ep.index_title)
+        data.videoInfo.page_ep_Data.cid = data.entryJsonData["ep.danmaku"].toLongLong();
+        data.videoInfo.page_ep_Data.page = data.entryJsonData["ep.index"].toInt();
+        data.videoInfo.page_ep_Data.partTitle = data.entryJsonData["ep.index_title"];
+        data.videoInfo.page_ep_Data.link = data.entryJsonData["ep.link"];
+        data.videoInfo.page_ep_Data.width = data.entryJsonData["ep.width"].toInt();
+        data.videoInfo.page_ep_Data.height = data.entryJsonData["ep.height"].toInt();
+        data.videoInfo.page_ep_Data.rotate = data.entryJsonData["ep.rotate"].toInt();
+    }
 
     if (data.videoInfo.title.isEmpty()) {
         Logger::instance()->warning("Parser", "⚠️ 警告：解析到的标题为空");
@@ -210,8 +234,8 @@ bool CacheFileParser::parseEntryJson(ParsedCacheData &data) {
         Logger::instance()->debug("Parser", QString("✅ 成功解析 AVID: %1").arg(data.videoInfo.avid));
     }
 
-    if (!data.entryJsonData.contains("page_data.cid")) {
-        Logger::instance()->warning("Parser", "⚠️ 警告：未找到 page_data 字段");
+    if (!data.entryJsonData.contains("page_data.cid") && !data.entryJsonData.contains("ep.danmaku")) {
+        Logger::instance()->warning("Parser", "⚠️ 警告：未找到 page_data 或 ep 字段");
     } else {
         Logger::instance()->debug("Parser", QString("✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(data.videoInfo.page_ep_Data.cid).arg(data.videoInfo.page_ep_Data.width).arg(data.videoInfo.page_ep_Data.height));
     }
