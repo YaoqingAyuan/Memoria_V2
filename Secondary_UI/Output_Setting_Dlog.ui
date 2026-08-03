@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>540</width>
-    <height>500</height>
+    <height>538</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -289,9 +289,6 @@
                 <property name="text">
                  <string>750</string>
                 </property>
-                <property name="maximumWidth">
-                 <number>80</number>
-                </property>
                </widget>
               </item>
               <item>
@@ -461,7 +458,7 @@
           <item row="2" column="1">
            <widget class="QStackedWidget" name="AudioQualityStack">
             <property name="currentIndex">
-             <number>0</number>
+             <number>1</number>
             </property>
             <widget class="QWidget" name="AudioQualityPage">
              <layout class="QHBoxLayout" name="AudioQualityPage_Layout">
@@ -599,12 +596,32 @@
    <signal>accepted()</signal>
    <receiver>Output_Setting_Dlog</receiver>
    <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
   </connection>
   <connection>
    <sender>Center_Cancel_btnBox</sender>
    <signal>rejected()</signal>
    <receiver>Output_Setting_Dlog</receiver>
    <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
   </connection>
  </connections>
 </ui>

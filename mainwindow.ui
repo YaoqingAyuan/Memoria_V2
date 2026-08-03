@@ -416,7 +416,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QTableView" name="tableView"/>
+     <widget class="QTableView" name="MetadataTable"/>
     </item>
    </layout>
   </widget>
@@ -426,7 +426,7 @@
      <x>0</x>
      <y>0</y>
      <width>1126</width>
-     <height>19</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu_F">

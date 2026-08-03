@@ -26,7 +26,8 @@ struct VideoInfo {
     qint64 totalTimeMilli;          //对应字段“total_time_milli”:视频总时长(单位:毫秒)
     qint64 totalBytes;              //对应字段“total_bytes”:视频总大小(单位:比特)
     qint64 downloadedBytes;         //对应字段“downloaded_bytes”:下载的比特数
-    //还可以加上弹幕数量以及缓存时间
+    qint64 create_timestamp;        //对应字段“time_create_stamp”:创建该缓存的时间
+    int recent_danmaku_count;       //对应字段“danmaku_count”:缓存时的弹幕数量
 
     //内部结构体结构声明
     struct PageData {       //Page_Data字段数据与ep(番剧)字段同构

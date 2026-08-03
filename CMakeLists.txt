@@ -40,6 +40,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         Secondary_UI/Independ_Import_Dialog.h Secondary_UI/Independ_Import_Dialog.cpp Secondary_UI/Independ_Import_Dialog.ui
         Secondary_UI/Link_Input_Weight.h Secondary_UI/Link_Input_Weight.cpp Secondary_UI/Link_Input_Weight.ui
         Secondary_UI/WLAN_Input_Weight.h Secondary_UI/WLAN_Input_Weight.cpp Secondary_UI/WLAN_Input_Weight.ui
+        Secondary_UI/Setting_Dialog.h Secondary_UI/Setting_Dialog.cpp Secondary_UI/Setting_Dialog.ui
 
 
     )
