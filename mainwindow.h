@@ -1,6 +1,6 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
-
+//主窗口
 #include <QMainWindow>
 #include <QMenu>
 
@@ -11,6 +11,8 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class DataModel;
+class Link_Input_Weight;
+class WLAN_Input_Weight;
 
 class MainWindow : public QMainWindow
 {
@@ -35,6 +37,9 @@ private:
     Ui::MainWindow *ui;
 
     DataModel *m_dataModel;     //表格数据模型
+
+    Link_Input_Weight *m_linkInputWindow = nullptr;   //外部有线导入窗口(复用)
+    WLAN_Input_Weight *m_wlanInputWindow = nullptr;   //外部无线导入窗口(复用)
 
     //初始化表格(MetadataTable)的视觉属性：列宽、行高、选择行为等
     void initTable();

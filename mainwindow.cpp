@@ -4,9 +4,15 @@
 #include "ParsedCacheData.h"
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
+#include "Secondary_UI/Output_Setting_Dlog.h"
+#include "Secondary_UI/Link_Input_Weight.h"
+#include "Secondary_UI/WLAN_Input_Weight.h"
 #include <QHeaderView>
 #include <QContextMenuEvent>
+#include <QFileDialog>
+#include <QDateTime>
 #include <algorithm>
+#include "utils.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -94,7 +100,22 @@ void MainWindow::setupTableContextMenu()
             //弹出独立导入对话框(操作右键所在行)
             Independ_Import_Dialog dialog(this);
             if (dialog.exec() == QDialog::Accepted) {
-                //TODO: 从对话框获取路径数据，填充到m_dataModel的对应行
+                //从对话框获取路径数据，填充到右键所在行
+                ParsedCacheData data;
+                data.videoInfo.audioFilePath = dialog.audioPath();
+                data.videoInfo.videoFilePath = dialog.videoPath();
+                //标题为空时使用默认标题(视频哈希前8位_音频哈希前8位_日期)
+                QString title = dialog.title();
+                if (title.isEmpty()) {
+                    QString videoHash = fileHashPrefix(data.videoInfo.videoFilePath, 8);
+                    QString audioHash = fileHashPrefix(data.videoInfo.audioFilePath, 8);
+                    title = QStringLiteral("%1_%2_%3")
+                        .arg(videoHash)
+                        .arg(audioHash)
+                        .arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
+                }
+                data.videoInfo.title = title;
+                m_dataModel->setRowData(index.row(), data);
             }
         } else if (selected == deleteAction) {
             if (selectedCount > 1 && rowSelected) {
@@ -119,16 +140,27 @@ void MainWindow::setupTableContextMenu()
     });
 }
 
-//输出按钮(路径设置、导出)
+//输出按钮：打开输出设置对话框(格式与参数设置)
 void MainWindow::on_OutputBtn_clicked()
 {
-
+    Output_Setting_Dlog dialog(this);
+    dialog.exec();
 }
 
 
+//输出路径浏览按钮：选择导出文件路径并填入OutputPath_Edit
 void MainWindow::on_OutputPath_Btn_clicked()
 {
-
+    //以当前编辑框内容为默认定位(空则使用系统最近目录)
+    const QString curPath = ui->OutputPath_Edit->text().trimmed(); //保存类型甚至是空都可以，只需要这个路径有效即可
+    const QString path = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("选择导出路径"),
+        curPath,
+        QStringLiteral("WebM 视频 (*.webm);;MP4 视频 (*.mp4);;所有文件 (*.*)"));
+    if (path.isEmpty())
+        return;
+    ui->OutputPath_Edit->setText(path);
 }
 
 //加行按钮：在表格末尾添加一个空行
@@ -159,10 +191,28 @@ void MainWindow::on_DeleteLine_Btn_clicked()
     }
 }
 
-//独立导入按钮
+//独立导入按钮：打开独立音视频导入对话框，确认后追加一行到表格
 void MainWindow::on_IndepImport_Btn_clicked()
 {
-
+    Independ_Import_Dialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        //构建数据行并追加到表格末尾
+        ParsedCacheData data;
+        data.videoInfo.audioFilePath = dialog.audioPath();
+        data.videoInfo.videoFilePath = dialog.videoPath();
+        //标题为空时使用默认标题(视频哈希前8位_音频哈希前8位_日期)
+        QString title = dialog.title();
+        if (title.isEmpty()) {
+            QString videoHash = fileHashPrefix(data.videoInfo.videoFilePath, 8);
+            QString audioHash = fileHashPrefix(data.videoInfo.audioFilePath, 8);
+            title = QStringLiteral("%1_%2_%3")
+                .arg(videoHash)
+                .arg(audioHash)
+                .arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
+        }
+        data.videoInfo.title = title;
+        m_dataModel->setRowData(-1, data);  //-1=追加到末尾
+    }
 }
 
 //设置按钮：打开设置对话框
@@ -173,19 +223,43 @@ void MainWindow::on_Setting_Btn_clicked()
 }
 
 //导入按钮组
+//外部有线导入按钮：打开有线导入窗口(复用同一实例)
 void MainWindow::on_Link_Input_Btn_clicked()
 {
-
+    if (!m_linkInputWindow) {
+        m_linkInputWindow = new Link_Input_Weight(this);
+        //以独立顶层窗口形式显示(而非嵌入主窗口)
+        m_linkInputWindow->setWindowFlag(Qt::Window);
+    }
+    m_linkInputWindow->show();
+    m_linkInputWindow->raise();
+    m_linkInputWindow->activateWindow();
 }
 
 
+//外部无线导入按钮：打开无线导入窗口(复用同一实例)
 void MainWindow::on_WLAN_Input_Btn_clicked()
 {
-
+    if (!m_wlanInputWindow) {
+        m_wlanInputWindow = new WLAN_Input_Weight(this);
+        m_wlanInputWindow->setWindowFlag(Qt::Window);
+    }
+    m_wlanInputWindow->show();
+    m_wlanInputWindow->raise();
+    m_wlanInputWindow->activateWindow();
 }
 
 
+//本地文件导入按钮：选择缓存离线诊断ID文件夹
 void MainWindow::on_LocalCache_Btn_clicked()
 {
-
+    //打开文件夹选择对话框(仅选择目录)
+    const QString cacheDir = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("选择缓存离线诊断ID文件夹"),
+        QString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (cacheDir.isEmpty())
+        return;
+    //TODO: 以cacheDir为根解析缓存文件夹(entry.json等)并导入到表格
 }
