@@ -33,6 +33,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         TaskQueue.h TaskQueue.cpp
         utils.h
         CacheFileParser.h CacheFileParser.cpp
+        DataModel.h DataModel.cpp
 
         logger.h logger.cpp
         Secondary_UI/Output_Setting_Dlog.h Secondary_UI/Output_Setting_Dlog.cpp Secondary_UI/Output_Setting_Dlog.ui
