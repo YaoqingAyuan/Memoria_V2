@@ -2,6 +2,9 @@
 #include "./ui_mainwindow.h"
 #include "DataModel.h"
 #include "ParsedCacheData.h"
+#include "TaskQueue.h"
+#include "FFmpeg_module.h"
+#include "CacheFileParser.h"
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
@@ -10,7 +13,10 @@
 #include <QHeaderView>
 #include <QContextMenuEvent>
 #include <QFileDialog>
+#include <QListView>
+#include <QTreeView>
 #include <QDateTime>
+#include <QMessageBox>
 #include <algorithm>
 #include "utils.h"
 
@@ -18,6 +24,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_dataModel(new DataModel(this))
+    , m_taskQueue(new TaskQueue(m_dataModel, this))
 {
     ui->setupUi(this);
 
@@ -140,27 +147,88 @@ void MainWindow::setupTableContextMenu()
     });
 }
 
-//输出按钮：打开输出设置对话框(格式与参数设置)
+//输出按钮：打开输出设置对话框，确定后构建混流任务并启动队列
 void MainWindow::on_OutputBtn_clicked()
 {
-    Output_Setting_Dlog dialog(this);
-    dialog.exec();
+    //收集当前选中的行索引(供"导出选中项"使用)
+    QList<int> selectedRows;
+    if (ui->MetadataTable->selectionModel()) {
+        const QModelIndexList selected = ui->MetadataTable->selectionModel()->selectedRows();
+        for (const QModelIndex &idx : selected)
+            selectedRows.append(idx.row());
+    }
+
+    Output_Setting_Dlog dialog(selectedRows, m_dataModel->rowCount(), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    //校验导出目录
+    const QString outputDir = ui->OutputPath_Edit->text().trimmed();
+    if (outputDir.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("提示"),
+            QStringLiteral("请先设置导出路径"));
+        return;
+    }
+
+    //从对话框获取导出配置
+    const QList<int> targetRows = dialog.targetRowIndices();
+    const OutputFormat format = dialog.selectedFormat();
+    const TranscodeParams params = dialog.transcodeParams();
+
+    //格式扩展名
+    QString ext;
+    switch (format) {
+    case OutputFormat::MP4:  ext = "mp4";  break;
+    case OutputFormat::MKV:  ext = "mkv";  break;
+    case OutputFormat::MOV:  ext = "mov";  break;
+    case OutputFormat::WEBM: ext = "webm"; break;
+    }
+
+    //逐行构建MuxRequest(跳过无效行)
+    QList<MuxRequest> requests;
+    QList<int> requestRowIndices;
+    for (int row : targetRows) {
+        const ParsedCacheData &data = m_dataModel->getRowData(row);
+        if (!data.videoInfo.isValid())
+            continue;
+
+        MuxRequest req;
+        req.videoPath = data.videoInfo.videoFilePath;
+        req.audioPath = data.videoInfo.audioFilePath;
+        req.format = format;
+        req.params = params;
+        //输出文件路径 = 导出目录/标题.扩展名
+        req.outputPath = outputDir + "/" + data.videoInfo.title + "." + ext;
+
+        requests.append(req);
+        requestRowIndices.append(row);
+    }
+
+    if (requests.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("提示"),
+            QStringLiteral("没有可导出的有效数据行(音视频路径缺失)"));
+        return;
+    }
+
+    //启动任务队列(异步执行，不阻塞UI)
+    m_taskQueue->start(requests, requestRowIndices);
 }
 
 
-//输出路径浏览按钮：选择导出文件路径并填入OutputPath_Edit
+//输出路径浏览按钮：选择导出目录并填入OutputPath_Edit
+//(仅选目录，文件格式由"导出设置"对话框中的格式选择决定)
 void MainWindow::on_OutputPath_Btn_clicked()
 {
     //以当前编辑框内容为默认定位(空则使用系统最近目录)
-    const QString curPath = ui->OutputPath_Edit->text().trimmed(); //保存类型甚至是空都可以，只需要这个路径有效即可
-    const QString path = QFileDialog::getSaveFileName(
+    const QString curPath = ui->OutputPath_Edit->text().trimmed();
+    const QString dir = QFileDialog::getExistingDirectory(
         this,
-        QStringLiteral("选择导出路径"),
+        QStringLiteral("选择导出目录"),
         curPath,
-        QStringLiteral("WebM 视频 (*.webm);;MP4 视频 (*.mp4);;所有文件 (*.*)"));
-    if (path.isEmpty())
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (dir.isEmpty())
         return;
-    ui->OutputPath_Edit->setText(path);
+    ui->OutputPath_Edit->setText(dir);
 }
 
 //加行按钮：在表格末尾添加一个空行
@@ -250,16 +318,53 @@ void MainWindow::on_WLAN_Input_Btn_clicked()
 }
 
 
-//本地文件导入按钮：选择缓存离线诊断ID文件夹
+//本地文件导入按钮：批量选择缓存离线诊断ID文件夹，解析后导入表格
 void MainWindow::on_LocalCache_Btn_clicked()
 {
-    //打开文件夹选择对话框(仅选择目录)
-    const QString cacheDir = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择缓存离线诊断ID文件夹"),
-        QString(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    if (cacheDir.isEmpty())
+    //使用非原生对话框以支持多目录选择(Qt原生限制)
+    QFileDialog dialog(this, QStringLiteral("选择缓存离线诊断ID文件夹(可多选)"));
+    dialog.setFileMode(QFileDialog::Directory);
+    dialog.setOption(QFileDialog::ShowDirsOnly, true);
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    //启用多选：QFileDialog内部可能用QListView(图标/列表模式)或QTreeView(详细模式)
+    //两者都查找并设为扩展选择模式(支持Shift连续多选、Ctrl不连续多选)
+    QListView *listView = dialog.findChild<QListView*>("listView");
+    if (listView)
+        listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    QTreeView *treeView = dialog.findChild<QTreeView*>("treeView");
+    if (treeView)
+        treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    if (dialog.exec() != QDialog::Accepted)
         return;
-    //TODO: 以cacheDir为根解析缓存文件夹(entry.json等)并导入到表格
+
+    const QStringList selectedDirs = dialog.selectedFiles();
+    if (selectedDirs.isEmpty())
+        return;
+
+    //逐个解析选中的文件夹，收集所有ParsedCacheData
+    CacheFileParser parser;
+    int totalImported = 0;
+    int failCount = 0;
+
+    for (const QString &dir : selectedDirs) {
+        QList<ParsedCacheData> dataList;
+        if (parser.Cathe_Parse(dir, dataList)) {
+            for (const ParsedCacheData &data : dataList) {
+                m_dataModel->setRowData(-1, data);  //-1=追加到末尾
+                totalImported++;
+            }
+        } else {
+            failCount++;
+        }
+    }
+
+    //提示导入结果
+    if (totalImported == 0) {
+        QMessageBox::warning(this, QStringLiteral("导入失败"),
+            QStringLiteral("未能从选中的文件夹中解析出有效数据"));
+    } else if (failCount > 0) {
+        QMessageBox::information(this, QStringLiteral("导入完成"),
+            QStringLiteral("成功导入 %1 条数据，%2 个文件夹解析失败").arg(totalImported).arg(failCount));
+    }
 }

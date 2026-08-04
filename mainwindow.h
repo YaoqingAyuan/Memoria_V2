@@ -11,6 +11,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class DataModel;
+class TaskQueue;
 class Link_Input_Weight;
 class WLAN_Input_Weight;
 
@@ -37,6 +38,7 @@ private:
     Ui::MainWindow *ui;
 
     DataModel *m_dataModel;     //表格数据模型
+    TaskQueue *m_taskQueue;     //导出任务队列(顺序驱动FFmpeg_module)
 
     Link_Input_Weight *m_linkInputWindow = nullptr;   //外部有线导入窗口(复用)
     WLAN_Input_Weight *m_wlanInputWindow = nullptr;   //外部无线导入窗口(复用)

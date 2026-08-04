@@ -3,6 +3,8 @@
 //二级UI：输出设置UI，搭建格式选择与参数设置(.webm)组件
 
 #include <QDialog>
+#include <QList>
+#include "FFmpeg_module.h"    //OutputFormat枚举、TranscodeParams结构体
 
 namespace Ui {
 class Output_Setting_Dlog;
@@ -13,10 +15,24 @@ class Output_Setting_Dlog : public QDialog
     Q_OBJECT
 
 public:
-    explicit Output_Setting_Dlog(QWidget *parent = nullptr);
+    //selectedRows: 主窗口表格当前选中的行索引列表(供"导出选中项"使用)
+    //totalRowCount: 表格总行数(供"导出首项""导出全部"使用)
+    explicit Output_Setting_Dlog(const QList<int> &selectedRows, int totalRowCount,
+                                 QWidget *parent = nullptr);
     ~Output_Setting_Dlog();
 
+    //=== 确定后供主窗口读取的导出配置 ===
+    QList<int> targetRowIndices() const;        //待导出的行索引列表(基于单选按钮选择)
+    OutputFormat selectedFormat() const;        //输出格式
+    TranscodeParams transcodeParams() const;    //转码参数(仅WEBM格式有效)
+
+public slots:
+    void accept() override;
+
 private slots:
+    // 格式选择切换 → 仅.webm启用音视频参数组件，其余格式禁用(复制流无需参数)
+    void on_FormChoose_cmbBox_currentIndexChanged(int index);
+
     // 视频参数：质量控制模式切换 → CRF / 目标码率互斥启用
     void on_VideoQualityMode_cmbBox_currentIndexChanged(int index);
     // 视频参数：无损勾选 → 禁用质量控制模式及其子组件
@@ -35,6 +51,18 @@ private slots:
 
 private:
     Ui::Output_Setting_Dlog *ui;
+
+    //主窗口传入的上下文
+    QList<int> m_selectedRows;      //当前选中的行索引
+    int m_totalRowCount;            //表格总行数
+
+    //确定后收集的导出配置(供getter返回)
+    QList<int> m_targetRows;        //待导出行索引
+    OutputFormat m_format;          //输出格式
+    TranscodeParams m_params;       //转码参数
+
+    //根据当前格式启用/禁用音视频参数区(仅.webm可操作，其余灰显)
+    void updateFormatDependentState();
 
     // 初始化视频参数区的条件状态
     void initVideoParamsState();

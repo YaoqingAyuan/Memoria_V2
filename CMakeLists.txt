@@ -69,6 +69,9 @@ endif()
 
 target_link_libraries(Memoria_N_V2 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 
+#将项目根目录加入包含路径，使Secondary_UI子目录中的文件可直接#include项目根目录的头文件
+target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.

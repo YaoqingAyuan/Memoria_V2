@@ -11,11 +11,14 @@
  *  CacheFileParser 成员函数工作流（字符画）
  * ============================================================
  *
- *  |  Cathe_Parse()   |  <-- 对外入口：解析一个缓存文件夹
+ *  |  Cathe_Parse()           |  <-- 对外入口：解析一个离线诊断ID文件夹
  *           ↓
  *  | 1.校验目录存在性           |
- *  | 2.初始化 ParsedCacheData   |
- *               ↓
+ *  | 2.遍历所有子目录(多P)      |
+ *           ↓
+ *  | 对每个子目录调用:          |
+ *  | parseSingleSubDir()      |  <-- 解析单个子目录(c_xxx/番剧集号)
+ *           ↓
  *  | 定位 entry.json 路径       |
  *               ↓
  *  |   findMediaFiles()        |  <-- 寻找 index.json / video.m4s / audio.m4s
@@ -34,20 +37,20 @@
  * | outData.videoInfo |  | outData.videoStream |
  * +----------------+  | outData.audioStream |
  *                               ↓
- *                     | getDirectorySize() |  <-- 递归计算目录总大小
+ *                     | getDirectorySize() |  <-- 递归计算子目录总大小
  *                              ↓
  *                     | 写入 totalBytes   |
  *                     | 写入 downloadedBytes|
  *                              ↓
- *                     |   返回 true/false  |
+ *                     | 追加到 outDataList |
  * ============================================================
  */
 
 CacheFileParser::CacheFileParser() {}
 
-//文件夹(Cathe)解析(Cathe_Parse)函数:解析文件夹(文件树结构)
-//工作流步骤1:递归找到所有文件路径(entryJsonPath, indexJsonPath, videoFilePath, audioFilePath)
-bool CacheFileParser::Cathe_Parse(const QString &folderPath, ParsedCacheData &outData) {
+//文件夹(Cathe)解析(Cathe_Parse)函数:解析离线诊断ID文件夹(文件树结构)
+//遍历所有子目录(多P场景下每个子目录是一个独立的P/集)，每个子目录生成一个ParsedCacheData
+bool CacheFileParser::Cathe_Parse(const QString &folderPath, QList<ParsedCacheData> &outDataList) {
     Logger::instance()->debug("Parser", QString(">>> 开始扫描目录: %1").arg(folderPath));
 
     QDir dir(folderPath);
@@ -56,21 +59,44 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, ParsedCacheData &ou
         return false;
     }
 
-    outData.videoInfo = VideoInfo();
-    outData.videoInfo.cacheRootPath = folderPath;
-
     QStringList subDirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     if (subDirs.isEmpty()) {
         Logger::instance()->critical("Parser", "❌ 错误：缓存目录为空，未找到子目录");
         return false;
     }
 
-    QString contentDir = subDirs.first();
-    QString contentPathStr = dir.filePath(contentDir);
-    Logger::instance()->debug("Parser", QString("✅ 找到内容子目录: %1").arg(contentDir));
+    Logger::instance()->debug("Parser", QString("发现 %1 个子目录").arg(subDirs.size()));
 
-    //步骤1.1:查找entry.json路径
-    QString entryJsonPath = QDir(contentPathStr).filePath("entry.json");
+    //遍历所有子目录，每个子目录解析为一个ParsedCacheData
+    int successCount = 0;
+    for (const QString &subDir : subDirs) {
+        QString subDirPath = dir.filePath(subDir);
+        ParsedCacheData data;
+
+        if (parseSingleSubDir(subDirPath, folderPath, data)) {
+            outDataList.append(data);
+            successCount++;
+        } else {
+            Logger::instance()->warning("Parser",
+                QString("⚠️ 子目录解析失败，已跳过: %1").arg(subDirPath));
+        }
+    }
+
+    Logger::instance()->debug("Parser",
+        QString("✅ 文件夹解析完成: %1 个子目录, 成功 %2 个").arg(subDirs.size()).arg(successCount));
+
+    return successCount > 0;
+}
+
+//解析单个子目录(离线诊断ID下的一个c_xxx或番剧集号目录)
+bool CacheFileParser::parseSingleSubDir(const QString &subDirPath, const QString &cacheRootPath, ParsedCacheData &outData) {
+    outData.videoInfo = VideoInfo();
+    outData.videoInfo.cacheRootPath = cacheRootPath;
+
+    QDir subDir(subDirPath);
+
+    //步骤1:查找entry.json路径
+    QString entryJsonPath = subDir.filePath("entry.json");
     QFileInfo entryFileInfo(entryJsonPath);
     if (!entryFileInfo.exists()) {
         Logger::instance()->critical("Parser", QString("❌ 错误：entry.json 文件不存在: %1").arg(entryJsonPath));
@@ -79,13 +105,13 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, ParsedCacheData &ou
     outData.videoInfo.entryJsonPath = entryFileInfo.absoluteFilePath();
     Logger::instance()->debug("Parser", QString("✅ 找到 entry.json: %1").arg(outData.videoInfo.entryJsonPath));
 
-    //步骤1.2:查找index.json路径和音视频文件路径(调用findMediaFiles)
-    if (!findMediaFiles(contentPathStr, outData)) {
+    //步骤2:查找index.json路径和音视频文件路径(调用findMediaFiles)
+    if (!findMediaFiles(subDirPath, outData)) {
         Logger::instance()->critical("Parser", "❌ 致命错误：未找到视频或音频文件");
         return false;
     }
 
-    //步骤2:展平JSON文件(先展平，后解析)
+    //步骤3:展平JSON文件(先展平，后解析)
     if (!EntryflattenJson(outData.videoInfo.entryJsonPath, outData.entryJsonData)) {
         Logger::instance()->critical("Parser", "❌ 致命错误：展平 entry.json 失败");
         return false;
@@ -96,7 +122,7 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, ParsedCacheData &ou
         return false;
     }
 
-    //步骤3:解析展平后的数据到结构体
+    //步骤4:解析展平后的数据到结构体
     if (!parseEntryJson(outData)) {
         Logger::instance()->critical("Parser", "❌ 致命错误：解析 entry.json 失败");
         return false;
@@ -107,8 +133,8 @@ bool CacheFileParser::Cathe_Parse(const QString &folderPath, ParsedCacheData &ou
         return false;
     }
 
-    //步骤4:计算目录大小(嵌入到解析流程中)
-    outData.videoInfo.totalBytes = getDirectorySize(dir);
+    //步骤5:计算该子目录大小(每个P独立计算)
+    outData.videoInfo.totalBytes = getDirectorySize(subDir);
     outData.videoInfo.downloadedBytes = outData.videoInfo.totalBytes;
 
     Logger::instance()->debug("Parser", QString("✅ 解析完成！视频标题: %1, AVID: %2").arg(outData.videoInfo.title).arg(outData.videoInfo.avid));
