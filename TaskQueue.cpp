@@ -18,6 +18,11 @@ TaskQueue::TaskQueue(DataModel *dataModel, QObject *parent)
             this, &TaskQueue::onTaskFinished);
 }
 
+//启动时自检FFmpeg环境(委托FFmpeg_module::selfCheck)
+QString TaskQueue::selfCheckFFmpeg() {
+    return m_ffmpeg->selfCheck();
+}
+
 void TaskQueue::start(const QList<MuxRequest> &requests, const QList<int> &rowIndices)
 {
     if (m_running) {

@@ -18,6 +18,10 @@ class TaskQueue : public QObject
 public:
     explicit TaskQueue(DataModel *dataModel, QObject *parent = nullptr);
 
+    //启动时自检FFmpeg环境(委托FFmpeg_module::selfCheck)，返回ffmpeg.exe完整路径(空串=未找到)
+    //在MainWindow构造时调用一次：既预填m_ffmpegPath供后续startMux复用，又供UI更新状态标签
+    QString selfCheckFFmpeg();
+
     //启动队列：requests与rowIndices一一对应(行索引用于更新进度)
     void start(const QList<MuxRequest> &requests, const QList<int> &rowIndices);
 

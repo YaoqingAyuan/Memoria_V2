@@ -29,6 +29,18 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    //启动时自检FFmpeg环境，根据结果更新状态标签(委托 TaskQueue → FFmpeg_module::selfCheck)
+    //自检同步执行(内部 where ffmpeg 通常 <200ms)，结果路径同时预填到FFmpeg_module供后续混流复用
+    const QString ffmpegPath = m_taskQueue->selfCheckFFmpeg();
+    if (ffmpegPath.isEmpty()) {
+        ui->FFmpegEnvLabel->setText(QStringLiteral("❌ 未找到 FFmpeg 环境"));
+        ui->FFmpegEnvLabel->setToolTip(QStringLiteral(
+            "未检测到 FFmpeg。请将 ffmpeg.exe 加入系统 PATH，或放入软件目录下的 FFmpeg_tools/bin/"));
+    } else {
+        ui->FFmpegEnvLabel->setText(QStringLiteral("✅ FFmpeg: %1").arg(ffmpegPath));
+        ui->FFmpegEnvLabel->setToolTip(QStringLiteral("FFmpeg 路径: %1").arg(ffmpegPath));
+    }
+
     //加载列可见性配置
     m_dataModel->loadColumnVisibility();
 
