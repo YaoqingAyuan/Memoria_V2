@@ -5,6 +5,7 @@
 #include "TaskQueue.h"
 #include "FFmpeg_module.h"
 #include "CacheFileParser.h"
+#include "utils.h"
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
@@ -197,8 +198,9 @@ void MainWindow::on_OutputBtn_clicked()
         req.audioPath = data.videoInfo.audioFilePath;
         req.format = format;
         req.params = params;
-        //输出文件路径 = 导出目录/标题.扩展名
-        req.outputPath = outputDir + "/" + data.videoInfo.title + "." + ext;
+        //输出文件路径 = 导出目录/安全标题.扩展名(清洗Windows非法字符)
+        const QString safeTitle = sanitizeFileName(data.videoInfo.title);
+        req.outputPath = outputDir + "/" + safeTitle + "." + ext;
 
         requests.append(req);
         requestRowIndices.append(row);

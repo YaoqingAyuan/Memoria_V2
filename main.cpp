@@ -3,6 +3,7 @@
 #include "ParsedCacheData.h"
 #include "FFmpeg_module.h"
 #include "logger.h"
+#include "utils.h"
 
 #include <QApplication>
 #include <QLocale>
@@ -60,12 +61,10 @@ int main(int argc, char *argv[])
     }
 
     // ---------- 2. 构造输出文件名(标题取自 VideoInfo.title) ----------
-    // 简单清理 Windows 文件名非法字符: \ / : * ? " < > |
-    QString safeTitle = parsedData.videoInfo.title;
-    safeTitle.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
-    if (safeTitle.trimmed().isEmpty()) {
-        safeTitle = QString("untitled_%1").arg(parsedData.videoInfo.avid);
-    }
+    // 清理 Windows 文件名非法字符(统一使用 sanitizeFileName)
+    const QString safeTitle = sanitizeFileName(
+        parsedData.videoInfo.title,
+        QString("untitled_%1").arg(parsedData.videoInfo.avid));
     QString outputPath = QDir(testOutputDir).filePath(safeTitle + ".mp4");
     Logger::instance()->debug("TEST", QString("输出文件: %1").arg(outputPath));
 

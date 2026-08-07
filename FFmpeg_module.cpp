@@ -286,7 +286,12 @@ void FFmpeg_module::stopMux() {
 //处理FFmpeg标准错误输出(进度信息通常在stderr中)
 void FFmpeg_module::onReadyReadStandardError() {
     QByteArray data = m_process->readAllStandardError();
-    QString output = QString::fromLocal8Bit(data);
+
+    //FFmpeg stderr 编码不确定(可能UTF-8或GBK)，采用UTF-8优先+本地编码回退策略
+    //先用UTF-8解码，若出现替换字符(说明非UTF-8)则回退到系统本地编码(中文Windows为GBK)
+    QString output = QString::fromUtf8(data);
+    if (output.contains(QChar::ReplacementCharacter))
+        output = QString::fromLocal8Bit(data);
 
     //发射原始日志信号(供UI日志面板显示)
     emit logOutput(output);
