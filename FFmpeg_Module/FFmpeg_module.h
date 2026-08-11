@@ -15,7 +15,7 @@
 #include <QString>
 #include <QStringList>
 #include <QRegularExpression>
-#include "ParsedCacheData.h"
+#include "Core/ParsedCacheData.h"
 
 //输出格式枚举(对应UI"格式选择对话框"的4种选项)
 enum class OutputFormat {

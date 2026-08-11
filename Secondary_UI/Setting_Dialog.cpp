@@ -1,6 +1,6 @@
 #include "Setting_Dialog.h"
 #include "ui_Setting_Dialog.h"
-#include "../DataModel.h"
+#include "../Core/DataModel.h"
 
 Setting_Dialog::Setting_Dialog(DataModel *model, QWidget *parent)
     : QDialog(parent)

@@ -8,7 +8,7 @@
 
 #include <QObject>
 #include <QList>
-#include "FFmpeg_module.h"    //MuxRequest定义
+#include "FFmpeg_Module/FFmpeg_module.h"    //MuxRequest定义
 
 class DataModel;
 

@@ -1,6 +1,6 @@
 #include "DiscoveryManager.h"
 #include "WlanProtocol.h"
-#include "logger.h"
+#include "Core/logger.h"
 #include <QNetworkInterface>
 #include <QJsonDocument>
 #include <QJsonParseError>

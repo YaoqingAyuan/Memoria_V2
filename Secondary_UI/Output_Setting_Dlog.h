@@ -4,7 +4,7 @@
 
 #include <QDialog>
 #include <QList>
-#include "FFmpeg_module.h"    //OutputFormat枚举、TranscodeParams结构体
+#include "FFmpeg_Module/FFmpeg_module.h"    //OutputFormat枚举、TranscodeParams结构体
 
 namespace Ui {
 class Output_Setting_Dlog;

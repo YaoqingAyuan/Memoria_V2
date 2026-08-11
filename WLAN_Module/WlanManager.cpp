@@ -3,7 +3,7 @@
 #include "TransferServer.h"
 #include "TransferClient.h"
 #include "WlanProtocol.h"
-#include "logger.h"
+#include "Core/logger.h"
 #include <QTcpSocket>
 #include <QDir>
 #include <QSet>

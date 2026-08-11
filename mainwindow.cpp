@@ -1,11 +1,11 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
-#include "DataModel.h"
-#include "ParsedCacheData.h"
-#include "TaskQueue.h"
-#include "FFmpeg_module.h"
-#include "CacheFileParser.h"
-#include "utils.h"
+#include "Core/DataModel.h"
+#include "Core/ParsedCacheData.h"
+#include "TaskQueue/TaskQueue.h"
+#include "FFmpeg_Module/FFmpeg_module.h"
+#include "Parser_Module/CacheFileParser.h"
+#include "Core/utils.h"
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
@@ -19,7 +19,7 @@
 #include <QDateTime>
 #include <QMessageBox>
 #include <algorithm>
-#include "utils.h"
+#include "Core/utils.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)

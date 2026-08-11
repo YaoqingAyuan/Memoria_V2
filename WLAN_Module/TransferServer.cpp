@@ -1,7 +1,7 @@
 #include "TransferServer.h"
 #include "TransferSession.h"
 #include "WlanProtocol.h"
-#include "logger.h"
+#include "Core/logger.h"
 #include <QTcpSocket>
 #include <QUuid>
 #include <QJsonArray>

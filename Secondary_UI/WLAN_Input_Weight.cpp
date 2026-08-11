@@ -2,9 +2,9 @@
 #include "ui_WLAN_Input_Weight.h"
 
 #include "ADB_Module/AdbModule.h"
-#include "CacheFileParser.h"
-#include "ParsedCacheData.h"
-#include "logger.h"
+#include "Parser_Module/CacheFileParser.h"
+#include "Core/ParsedCacheData.h"
+#include "Core/logger.h"
 
 #include <QStandardItemModel>
 #include <QInputDialog>

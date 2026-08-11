@@ -1,7 +1,7 @@
 #include "TransferSession.h"
 #include "WlanProtocol.h"
-#include "utils.h"
-#include "logger.h"
+#include "Core/utils.h"
+#include "Core/logger.h"
 #include <QFile>
 #include <QDir>
 #include <QFileInfo>

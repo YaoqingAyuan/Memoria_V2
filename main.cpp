@@ -1,9 +1,9 @@
 #include "mainwindow.h"
-#include "CacheFileParser.h"
-#include "ParsedCacheData.h"
-#include "FFmpeg_module.h"
-#include "logger.h"
-#include "utils.h"
+#include "Parser_Module/CacheFileParser.h"
+#include "Core/ParsedCacheData.h"
+#include "FFmpeg_Module/FFmpeg_module.h"
+#include "Core/logger.h"
+#include "Core/utils.h"
 #include "ADB_Module/AdbModule.h"
 
 #include <QApplication>

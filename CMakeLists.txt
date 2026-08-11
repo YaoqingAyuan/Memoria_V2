@@ -27,15 +27,15 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
 
-        FFmpeg_module.h FFmpeg_module.cpp
+        FFmpeg_Module/FFmpeg_module.h FFmpeg_Module/FFmpeg_module.cpp
 
-        ParsedCacheData.h ParsedCacheData.cpp
-        TaskQueue.h TaskQueue.cpp
-        utils.h
-        CacheFileParser.h CacheFileParser.cpp
-        DataModel.h DataModel.cpp
+        Core/ParsedCacheData.h Core/ParsedCacheData.cpp
+        TaskQueue/TaskQueue.h TaskQueue/TaskQueue.cpp
+        Core/utils.h
+        Parser_Module/CacheFileParser.h Parser_Module/CacheFileParser.cpp
+        Core/DataModel.h Core/DataModel.cpp
 
-        logger.h logger.cpp
+        Core/logger.h Core/logger.cpp
         Secondary_UI/Output_Setting_Dlog.h Secondary_UI/Output_Setting_Dlog.cpp Secondary_UI/Output_Setting_Dlog.ui
         Secondary_UI/VideoPlayback_Weight.h Secondary_UI/VideoPlayback_Weight.cpp Secondary_UI/VideoPlayback_Weight.ui
         Secondary_UI/Independ_Import_Dialog.h Secondary_UI/Independ_Import_Dialog.cpp Secondary_UI/Independ_Import_Dialog.ui
@@ -78,8 +78,8 @@ endif()
 
 target_link_libraries(Memoria_N_V2 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network)
 
-#将项目根目录加入包含路径，使Secondary_UI子目录中的文件可直接#include项目根目录的头文件
-target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+#将项目根目录及Core子目录加入包含路径，使各子目录中的文件可通过 "Core/xxx.h" 或 "xxx.h" 引用核心头文件
+target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/Core)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

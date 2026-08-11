@@ -1,5 +1,5 @@
 #include "AdbModule.h"
-#include "logger.h"
+#include "Core/logger.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>

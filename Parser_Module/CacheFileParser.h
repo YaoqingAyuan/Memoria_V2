@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QList>
-#include "ParsedCacheData.h"
+#include "Core/ParsedCacheData.h"
 
 //类声明
 class CacheFileParser

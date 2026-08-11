@@ -1,6 +1,6 @@
 #include "CacheFileParser.h"
-#include "ParsedCacheData.h"
-#include "logger.h"
+#include "Core/ParsedCacheData.h"
+#include "Core/logger.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
