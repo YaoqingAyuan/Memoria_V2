@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>WLAN 无线导入</string>
+   <string>ADB 无线导入</string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
    <property name="spacing">
@@ -57,53 +57,44 @@
        <number>8</number>
       </property>
       <item>
-       <widget class="QLabel" name="wifiIcon">
+       <widget class="QLabel" name="adbIcon">
         <property name="text">
-         <string>📶</string>
+         <string>🤖</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="wifiLabel">
+       <widget class="QLabel" name="adbStatusLabel">
+        <property name="styleSheet">
+         <string notr="true">font-weight: 500;</string>
+        </property>
         <property name="text">
-         <string>WiFi:</string>
+         <string>ADB: 检测中...</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="wifiCombo">
-        <property name="minimumSize">
-         <size>
-          <width>180</width>
-          <height>0</height>
-         </size>
+       <widget class="QPushButton" name="pairBtn">
+        <property name="text">
+         <string>🔗 配对</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="passwordEdit">
-        <property name="visible">
-         <bool>false</bool>
-        </property>
+       <widget class="QLineEdit" name="connectEdit">
         <property name="maximumSize">
          <size>
-          <width>140</width>
+          <width>180</width>
           <height>16777215</height>
          </size>
         </property>
-        <property name="echoMode">
-         <enum>QLineEdit::Password</enum>
-        </property>
         <property name="placeholderText">
-         <string>输入密码...</string>
+         <string>IP:端口 (如 192.168.1.8:5555)</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="connectBtn">
-        <property name="visible">
-         <bool>false</bool>
-        </property>
+       <widget class="QPushButton" name="connectDeviceBtn">
         <property name="text">
          <string>连接</string>
         </property>
@@ -299,23 +290,13 @@
         </widget>
        </item>
        <item>
-        <widget class="QTreeWidget" name="fileTree">
-         <property name="headerHidden">
-          <bool>true</bool>
+        <widget class="QListView" name="fileList">
+         <property name="selectionMode">
+          <enum>QAbstractItemView::ExtendedSelection</enum>
          </property>
-         <property name="columnCount">
-          <number>2</number>
+         <property name="selectionBehavior">
+          <enum>QAbstractItemView::SelectRows</enum>
          </property>
-         <column>
-          <property name="text">
-           <string notr="true">1</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string notr="true">2</string>
-          </property>
-         </column>
         </widget>
        </item>
       </layout>

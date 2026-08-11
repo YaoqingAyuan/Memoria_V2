@@ -4,6 +4,7 @@
 #include "FFmpeg_module.h"
 #include "logger.h"
 #include "utils.h"
+#include "ADB_Module/AdbModule.h"
 
 #include <QApplication>
 #include <QLocale>
@@ -12,6 +13,13 @@
 #include <QFileInfo>
 #include <QEventLoop>
 #include <QRegularExpression>
+
+// ============================================================================
+// 【临时ADB自检测试】测试完毕后，注释掉下面这行宏定义即可恢复原主流程
+// 测试目标：验证 AdbModule::selfCheck() 能否找到 ADB_tools/bin/adb.exe
+// 验证项：1.selfCheck路径解析  2.adb version 可执行
+// ============================================================================
+//#define TEST_ADB_SELFCHECK
 
 // ============================================================================
 // 【临时闭环测试】测试完毕后，注释掉下面这行宏定义即可恢复原主流程
@@ -26,7 +34,35 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
-#ifdef TEST_CLOSED_LOOP
+#ifdef TEST_ADB_SELFCHECK
+    // ==================== ADB自检测试：开始 ====================
+    Logger::instance()->debug("ADB_TEST", "========== ADB自检测试开始 ==========");
+
+    AdbModule adb;
+    QString adbPath = adb.selfCheck();
+
+    if (adbPath.isEmpty()) {
+        Logger::instance()->critical("ADB_TEST", "❌ ADB自检失败：未找到adb.exe");
+        return -1;
+    }
+
+    Logger::instance()->debug("ADB_TEST", QString("✅ ADB自检成功，路径: %1").arg(adbPath));
+
+    //额外验证：执行 adb version 确认adb可正常运行（非selfCheck的一部分，仅辅助验证）
+    QProcess versionProbe;
+    versionProbe.start(adbPath, QStringList() << "version");
+    if (versionProbe.waitForFinished(5000) && versionProbe.exitCode() == 0) {
+        QString version = QString::fromUtf8(versionProbe.readAllStandardOutput()).trimmed();
+        Logger::instance()->debug("ADB_TEST", QString("✅ adb version 输出:\n%1").arg(version));
+    } else {
+        Logger::instance()->warning("ADB_TEST", "⚠️ adb version 执行失败（不影响selfCheck验证结果）");
+    }
+
+    Logger::instance()->debug("ADB_TEST", "========== ADB自检测试结束 ==========");
+    return 0;
+    // ==================== ADB自检测试：结束 ====================
+
+#elif defined(TEST_CLOSED_LOOP)
     // ==================== 临时闭环测试：开始 ====================
     Logger::instance()->debug("TEST", "========== 闭环测试开始 ==========");
 

@@ -2,6 +2,8 @@
 #define WLANTYPES_H
 //WLAN模块跨层共享的数据结构：设备信息、文件元数据、帧类型枚举
 //对应LocalSend的 model/discovery.rs(设备信息) + model/transfer.rs(文件元数据)
+//经过确认WLAN模块几乎只能用于PC-PC，还都是同时运行Memoria的场景
+//这个场景想想都觉得用处太少，看看后面测试这个功能还用得上不？用不上的话就去了
 
 #include <QString>
 #include <QHostAddress>

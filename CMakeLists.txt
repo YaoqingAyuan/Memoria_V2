@@ -49,6 +49,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         WLAN_Module/TransferClient.h WLAN_Module/TransferClient.cpp
         WLAN_Module/TransferSession.h WLAN_Module/TransferSession.cpp
         WLAN_Module/WlanManager.h WLAN_Module/WlanManager.cpp
+        Adb_Module/AdbTypes.h
+        Adb_Module/AdbModule.h Adb_Module/AdbModule.cpp
 
 
     )

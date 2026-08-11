@@ -1,14 +1,47 @@
 #include "WLAN_Input_Weight.h"
 #include "ui_WLAN_Input_Weight.h"
 
-#include <QTreeWidgetItemIterator>
+#include "ADB_Module/AdbModule.h"
+#include "CacheFileParser.h"
+#include "ParsedCacheData.h"
+#include "logger.h"
+
+#include <QStandardItemModel>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QColor>
 #include <QMenu>
 #include <QAction>
+#include <QDir>
+#include <QFileInfo>
 
-//辅助：从树节点显示文本中提取文件夹名
+//B站缓存默认根路径
+const QString WLAN_Input_Weight::BILI_CACHE_ROOT = "/sdcard/Android/data/tv.danmaku.bili/download";
+
+//辅助：格式化文件大小
+static QString formatSize(qint64 bytes)
+{
+    if (bytes < 1024) return QString::number(bytes) + " B";
+    if (bytes < 1024 * 1024) return QString::number(bytes / 1024.0, 'f', 1) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return QString::number(bytes / (1024.0 * 1024), 'f', 1) + " MB";
+    return QString::number(bytes / (1024.0 * 1024 * 1024), 'f', 2) + " GB";
+}
+
+//辅助：递归计算目录总大小
+static qint64 dirSize(const QString &path)
+{
+    qint64 total = 0;
+    QDir dir(path);
+    const auto entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const auto &entry : entries) {
+        if (entry.isDir()) total += dirSize(entry.absoluteFilePath());
+        else total += entry.size();
+    }
+    return total;
+}
+
+//辅助：从预览树节点显示文本中提取文件夹名
 //显示格式 "📁 folderName/" → 返回 "folderName"
 static QString extractFolderName(const QString &displayText)
 {
@@ -19,13 +52,32 @@ static QString extractFolderName(const QString &displayText)
     return name.trimmed();
 }
 
+// ============================================================
+// 构造/析构
+// ============================================================
+
 WLAN_Input_Weight::WLAN_Input_Weight(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::WLAN_Input_Weight)
+    , m_adb(new AdbModule(this))
+    , m_fileModel(new QStandardItemModel(this))
 {
     ui->setupUi(this);
     initUI();
-    populateDemoData();
+
+    //ADB自检
+    QString adbPath = m_adb->selfCheck();
+    updateAdbStatus(!adbPath.isEmpty(),
+                    adbPath.isEmpty() ? QStringLiteral("ADB: 未找到") : QStringLiteral("ADB: 就绪"));
+
+    //设置本地拉取暂存目录
+    m_localPullDir = QDir::tempPath() + "/Memoria_ADB_Pull";
+    QDir().mkpath(m_localPullDir);
+
+    //自检通过则自动刷新设备列表
+    if (!adbPath.isEmpty()) {
+        onRefreshDevices();
+    }
 }
 
 WLAN_Input_Weight::~WLAN_Input_Weight()
@@ -33,9 +85,10 @@ WLAN_Input_Weight::~WLAN_Input_Weight()
     delete ui;
 }
 
-//==================================================
-// initUI: .ui无法表达的运行时配置（分割比例、表头模式、信号槽）
-//==================================================
+// ============================================================
+// initUI: .ui无法表达的运行时配置
+// ============================================================
+
 void WLAN_Input_Weight::initUI()
 {
     //三栏比例：左固定 / 中弹性 / 右固定
@@ -43,136 +96,187 @@ void WLAN_Input_Weight::initUI()
     ui->splitter->setStretchFactor(1, 1);
     ui->splitter->setStretchFactor(2, 0);
     ui->splitter->setSizes({180, 460, 260});
-    //主布局中splitter占据弹性空间（索引1）
     ui->mainLayout->setStretchFactor(ui->splitter, 1);
 
-    //文件树列宽模式
-    ui->fileTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    ui->fileTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    //文件列表模型
+    ui->fileList->setModel(m_fileModel);
+
     //预览树列宽模式
     ui->previewTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->previewTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
 
-    //=== 信号/槽连接 ===
+    //进度条初始状态
+    ui->progressBar->setValue(0);
+    ui->progressLabel->setText(QStringLiteral("就绪"));
+
+    //路径标签初始显示
+    ui->pathLabel->setText(BILI_CACHE_ROOT);
+
+    //=== UI信号/槽连接 ===
+    //ADB设备管理
     connect(ui->refreshBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onRefreshDevices);
+    connect(ui->pairBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onPairDevice);
+    connect(ui->connectDeviceBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConnectDevice);
     connect(ui->deviceList, &QListWidget::customContextMenuRequested,
             this, &WLAN_Input_Weight::onDeviceContextMenu);
-    connect(ui->fileTree, &QTreeWidget::itemChanged,
-            this, &WLAN_Input_Weight::onFileItemChanged);
-    connect(ui->parseBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onParseSelected);
-    connect(ui->confirmBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConfirmImport);
-    connect(ui->selectAllCheck, &QCheckBox::toggled,
-            this, &WLAN_Input_Weight::onSelectAllChanged);
-    connect(ui->previewTree, &QTreeWidget::itemChanged,
-            this, &WLAN_Input_Weight::onPreviewItemChanged);
-    connect(ui->wifiCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &WLAN_Input_Weight::onWifiSelectionChanged);
-    connect(ui->connectBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConnectWifi);
+    connect(ui->deviceList, &QListWidget::itemSelectionChanged,
+            this, &WLAN_Input_Weight::onDeviceSelectionChanged);
+
+    //远程文件浏览
+    connect(ui->fileList, &QListView::doubleClicked,
+            this, &WLAN_Input_Weight::onFileDoubleClicked);
     connect(ui->upBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onUpButtonClicked);
+
+    //拉取/解析
+    connect(ui->parseBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onParseSelected);
+
+    //预览/导入
+    connect(ui->confirmBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConfirmImport);
+    connect(ui->selectAllCheck, &QCheckBox::toggled, this, &WLAN_Input_Weight::onSelectAllChanged);
+    connect(ui->previewTree, &QTreeWidget::itemChanged, this, &WLAN_Input_Weight::onPreviewItemChanged);
+
+    //取消
     connect(ui->cancelBtn, &QPushButton::clicked, this, &QWidget::close);
+
+    //=== AdbModule信号连接 ===
+    connect(m_adb, &AdbModule::deviceListChanged, this, &WLAN_Input_Weight::onDeviceListChanged);
+    connect(m_adb, &AdbModule::dirListReady, this, &WLAN_Input_Weight::onDirListReady);
+    connect(m_adb, &AdbModule::pullProgressChanged, this, &WLAN_Input_Weight::onPullProgressChanged);
+    connect(m_adb, &AdbModule::pullFinished, this, &WLAN_Input_Weight::onPullFinished);
+    connect(m_adb, &AdbModule::errorOccurred, this, &WLAN_Input_Weight::onAdbError);
+
+    //配对/连接结果（简单弹窗反馈）
+    connect(m_adb, &AdbModule::pairResult, this,
+            [this](bool success, const QString &msg) {
+                QMessageBox::information(this, QStringLiteral("配对结果"), msg);
+                if (success) onRefreshDevices();
+            });
+    connect(m_adb, &AdbModule::connectResult, this,
+            [this](bool success, const QString &msg) {
+                QMessageBox::information(this, QStringLiteral("连接结果"), msg);
+                if (success) onRefreshDevices();
+            });
 }
 
-//==================================================
-// populateDemoData: 填充演示数据（WiFi、设备、文件树）
-//==================================================
-void WLAN_Input_Weight::populateDemoData()
+// ============================================================
+// ADB状态更新
+// ============================================================
+
+void WLAN_Input_Weight::updateAdbStatus(bool ready, const QString &text)
 {
-    //WiFi 网络列表
-    ui->wifiCombo->addItem(QStringLiteral("选择WiFi网络..."));
-    ui->wifiCombo->addItem("📶 CU_7pfc_5G  🔒");
-    ui->wifiCombo->addItem("📶 OnePlus Ace 3V  🔒");
-    ui->wifiCombo->addItem("📶 PMLK");
-
-    //设备列表（不显示IP；IP存储在UserRole中供右键菜单查看）
-    auto *dev1 = new QListWidgetItem(QStringLiteral("📱  Pixel 7 Pro  · 已连接"));
-    dev1->setData(Qt::UserRole, "192.168.1.8");
-    dev1->setBackground(QColor(229, 234, 255));  //#E5EAFF 高亮已连接设备
-    ui->deviceList->addItem(dev1);
-
-    auto *dev2 = new QListWidgetItem(QStringLiteral("📱  iPhone 13  · 在线"));
-    dev2->setData(Qt::UserRole, "192.168.1.5");
-    ui->deviceList->addItem(dev2);
-
-    auto *searching = new QListWidgetItem(QStringLiteral("🔍  搜索中..."));
-    searching->setFlags(searching->flags() & ~Qt::ItemIsSelectable);
-    searching->setForeground(QColor(82, 82, 91));  //#52525B
-    ui->deviceList->addItem(searching);
-
-    //文件树（缓存文件结构，依据 CatheFile_tree.txt）
-    ui->fileTree->blockSignals(true);
-
-    //download/
-    auto *download = new QTreeWidgetItem({"📁 download/", ""});
-    ui->fileTree->addTopLevelItem(download);
-
-    //328668592/ (离线诊断ID, 多P示例)
-    auto *id1 = new QTreeWidgetItem({"📁 328668592/", ""});
-    id1->setCheckState(0, Qt::Checked);
-    download->addChild(id1);
-
-    //c_205344854/ (P1)
-    auto *c1 = new QTreeWidgetItem({"📁 c_205344854/", ""});
-    id1->addChild(c1);
-    c1->addChild(new QTreeWidgetItem({"📄 cover.jpg", "125 KB"}));
-    c1->addChild(new QTreeWidgetItem({"📄 danmaku.xml", "15 KB"}));
-    c1->addChild(new QTreeWidgetItem({"📄 danmaku.pb", "45 KB"}));
-    c1->addChild(new QTreeWidgetItem({"📄 entry.json", "2.1 KB"}));
-    auto *dir80_1 = new QTreeWidgetItem({"📁 80/", ""});
-    c1->addChild(dir80_1);
-    dir80_1->addChild(new QTreeWidgetItem({"📄 audio.m4s", "32.1 MB"}));
-    dir80_1->addChild(new QTreeWidgetItem({"📄 index.json", "1.5 KB"}));
-    dir80_1->addChild(new QTreeWidgetItem({"📄 video.m4s", "45.2 MB"}));
-
-    //c_205348377/ (P2)
-    auto *c2 = new QTreeWidgetItem({"📁 c_205348377/", ""});
-    id1->addChild(c2);
-    c2->addChild(new QTreeWidgetItem({"📄 cover.jpg", "130 KB"}));
-    c2->addChild(new QTreeWidgetItem({"📄 entry.json", "2.3 KB"}));
-    auto *dir80_2 = new QTreeWidgetItem({"📁 80/", ""});
-    c2->addChild(dir80_2);
-    dir80_2->addChild(new QTreeWidgetItem({"📄 audio.m4s", "28.5 MB"}));
-    dir80_2->addChild(new QTreeWidgetItem({"📄 video.m4s", "38.7 MB"}));
-
-    //S_46752/ (离线诊断ID, 番剧示例)
-    auto *id2 = new QTreeWidgetItem({"📁 S_46752/", ""});
-    id2->setCheckState(0, Qt::Unchecked);
-    download->addChild(id2);
-
-    //801229/ (第1话)
-    auto *ep1 = new QTreeWidgetItem({"📁 801229/", ""});
-    id2->addChild(ep1);
-    ep1->addChild(new QTreeWidgetItem({"📄 cover.jpg", "110 KB"}));
-    ep1->addChild(new QTreeWidgetItem({"📄 entry.json", "1.8 KB"}));
-    auto *dir80_3 = new QTreeWidgetItem({"📁 80/", ""});
-    ep1->addChild(dir80_3);
-    dir80_3->addChild(new QTreeWidgetItem({"📄 audio.m4s", "25.3 MB"}));
-    dir80_3->addChild(new QTreeWidgetItem({"📄 video.m4s", "42.1 MB"}));
-
-    //801230/ (第2话, 折叠)
-    auto *ep2 = new QTreeWidgetItem({"📁 801230/", ""});
-    id2->addChild(ep2);
-
-    //.patch/
-    auto *patch = new QTreeWidgetItem({"📁 .patch/", ""});
-    download->addChild(patch);
-
-    ui->fileTree->blockSignals(false);
-
-    //展开前两级
-    download->setExpanded(true);
-    id1->setExpanded(true);
-    id2->setExpanded(false);
+    ui->adbStatusLabel->setText(text);
+    if (ready) {
+        ui->statusDot->setStyleSheet("background-color: #1DC981; border-radius: 4px;");
+        ui->statusText->setText(QStringLiteral("就绪"));
+    } else {
+        ui->statusDot->setStyleSheet("background-color: #EF4444; border-radius: 4px;");
+        ui->statusText->setText(QStringLiteral("未就绪"));
+    }
 }
 
-//==================================================
-// 槽函数实现
-//==================================================
+// ============================================================
+// ADB设备管理
+// ============================================================
 
 void WLAN_Input_Weight::onRefreshDevices()
 {
-    //TODO: 接入 WlanManager::start() 重新广播并扫描
-    QMessageBox::information(this, QStringLiteral("刷新设备"),
-                             QStringLiteral("正在搜索同一局域网内的设备..."));
+    if (m_adb->getAdbPath().isEmpty()) {
+        QMessageBox::critical(this, QStringLiteral("ADB未就绪"),
+            QStringLiteral("未检测到ADB环境，无法刷新设备列表。"));
+        return;
+    }
+    ui->refreshBtn->setEnabled(false);
+    m_adb->refreshDevices();
+}
+
+void WLAN_Input_Weight::onPairDevice()
+{
+    //配对需要两步输入：配对地址(IP:端口) + 配对码
+    bool ok;
+    QString addr = QInputDialog::getText(this, QStringLiteral("配对设备"),
+        QStringLiteral("配对地址 (IP:端口):"), QLineEdit::Normal, "", &ok);
+    if (!ok || addr.trimmed().isEmpty()) return;
+
+    QString code = QInputDialog::getText(this, QStringLiteral("配对设备"),
+        QStringLiteral("配对码 (6位数字):"), QLineEdit::Normal, "", &ok);
+    if (!ok || code.trimmed().isEmpty()) return;
+
+    QStringList parts = addr.trimmed().split(':');
+    if (parts.size() != 2) {
+        QMessageBox::warning(this, QStringLiteral("格式错误"),
+            QStringLiteral("地址格式应为 IP:端口，如 192.168.1.8:42171"));
+        return;
+    }
+
+    m_adb->pairDevice(parts[0], parts[1].toInt(), code.trimmed());
+}
+
+void WLAN_Input_Weight::onConnectDevice()
+{
+    QString text = ui->connectEdit->text().trimmed();
+    if (text.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("输入为空"),
+            QStringLiteral("请输入设备地址，如 192.168.1.8:5555"));
+        return;
+    }
+
+    QStringList parts = text.split(':');
+    if (parts.size() != 2) {
+        QMessageBox::warning(this, QStringLiteral("格式错误"),
+            QStringLiteral("地址格式应为 IP:端口，如 192.168.1.8:5555"));
+        return;
+    }
+
+    m_adb->connectDevice(parts[0], parts[1].toInt());
+}
+
+void WLAN_Input_Weight::onDeviceListChanged(const QList<AdbDeviceInfo> &devices)
+{
+    ui->deviceList->blockSignals(true);
+    ui->deviceList->clear();
+
+    for (const auto &dev : devices) {
+        QString displayText = dev.model.isEmpty()
+            ? (QStringLiteral("📱 ") + dev.serial)
+            : (QStringLiteral("📱 ") + dev.model);
+
+        if (dev.state == "device") {
+            displayText += QStringLiteral(" · 已连接");
+        } else if (dev.state == "offline") {
+            displayText += QStringLiteral(" · 离线");
+        } else if (dev.state == "unauthorized") {
+            displayText += QStringLiteral(" · 未授权");
+        }
+
+        auto *item = new QListWidgetItem(displayText);
+        item->setData(Qt::UserRole, dev.serial);
+        if (dev.state == "device") {
+            item->setBackground(QColor(229, 234, 255));  //高亮已连接设备
+        }
+        ui->deviceList->addItem(item);
+    }
+
+    if (devices.isEmpty()) {
+        auto *empty = new QListWidgetItem(QStringLiteral("🔍 暂无设备，请配对/连接后刷新"));
+        empty->setFlags(empty->flags() & ~Qt::ItemIsSelectable);
+        empty->setForeground(QColor(82, 82, 91));
+        ui->deviceList->addItem(empty);
+    }
+
+    ui->deviceList->blockSignals(false);
+    ui->refreshBtn->setEnabled(true);
+}
+
+void WLAN_Input_Weight::onDeviceSelectionChanged()
+{
+    auto *item = ui->deviceList->currentItem();
+    if (!item) return;
+
+    m_currentSerial = item->data(Qt::UserRole).toString();
+    if (m_currentSerial.isEmpty()) return;
+
+    //选中设备后自动浏览B站缓存目录
+    browseDir(m_currentRemotePath.isEmpty() ? BILI_CACHE_ROOT : m_currentRemotePath);
 }
 
 void WLAN_Input_Weight::onDeviceContextMenu(const QPoint &pos)
@@ -180,106 +284,226 @@ void WLAN_Input_Weight::onDeviceContextMenu(const QPoint &pos)
     auto *item = ui->deviceList->itemAt(pos);
     if (!item) return;
 
+    QString serial = item->data(Qt::UserRole).toString();
+    if (serial.isEmpty()) return;
+
     QMenu menu(this);
     QAction *detailAction = menu.addAction(QStringLiteral("设备详情"));
+    QAction *disconnectAction = menu.addAction(QStringLiteral("断开连接"));
 
     QAction *selected = menu.exec(ui->deviceList->mapToGlobal(pos));
     if (selected == detailAction) {
-        QString ip = item->data(Qt::UserRole).toString();
-        QString text = item->text();
-        //提取设备名（去掉emoji和状态后缀）
-        QString name = text;
-        int dotIdx = name.indexOf(QChar(0x00B7));  //"·" 分隔符
-        if (dotIdx > 0) name = name.left(dotIdx).trimmed();
-        int spaceIdx = name.indexOf(' ');
-        if (spaceIdx >= 0) name = name.mid(spaceIdx + 1).trimmed();
-
         QMessageBox::information(this, QStringLiteral("设备详情"),
-            QStringLiteral("设备名: %1\nIP 地址: %2").arg(name, ip));
+            QStringLiteral("序列号: %1\n显示: %2").arg(serial, item->text()));
+    } else if (selected == disconnectAction) {
+        m_adb->disconnectDevice(serial);
     }
 }
 
-void WLAN_Input_Weight::onFileItemChanged(QTreeWidgetItem *item, int column)
+// ============================================================
+// 远程文件浏览
+// ============================================================
+
+void WLAN_Input_Weight::browseDir(const QString &remotePath)
 {
-    if (column != 0 || item->checkState(0) != Qt::Checked) return;
+    if (m_currentSerial.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("未选择设备"),
+            QStringLiteral("请先在设备列表中选择一台已连接的设备。"));
+        return;
+    }
+    m_currentRemotePath = remotePath;
+    ui->pathLabel->setText(remotePath);
+    m_adb->listDir(m_currentSerial, remotePath);
+}
 
-    //防呆验证：只有"离线诊断ID"文件夹可被选中
-    //特征：纯数字(如328668592) 或 S_开头(如S_46752)
-    QString folderName = extractFolderName(item->text(0));
+void WLAN_Input_Weight::onDirListReady(const QString &path, const QList<AdbDirEntry> &entries)
+{
+    Q_UNUSED(path)
+    m_fileModel->clear();
 
-    bool isNumeric = false;
-    folderName.toLongLong(&isNumeric);
-    bool isBangumi = folderName.startsWith("S_");
+    for (const auto &entry : entries) {
+        QString displayText;
+        if (entry.isDir) {
+            displayText = QStringLiteral("📁 ") + entry.name + "/";
+        } else {
+            displayText = QStringLiteral("📄 ") + entry.name + "  (" + formatSize(entry.size) + ")";
+        }
 
-    if (!isNumeric && !isBangumi) {
-        ui->fileTree->blockSignals(true);
-        item->setCheckState(0, Qt::Unchecked);
-        ui->fileTree->blockSignals(false);
-
-        QMessageBox::warning(this, QStringLiteral("选择无效"),
-            QStringLiteral("请选择\"离线诊断ID\"文件夹（纯数字或 S_ 开头），\n"
-                           "而非内部子目录或文件。"));
+        auto *item = new QStandardItem(displayText);
+        item->setData(entry.name, Qt::UserRole);        //原始文件名
+        item->setData(entry.isDir, Qt::UserRole + 1);   //是否为目录
+        item->setEditable(false);
+        m_fileModel->appendRow(item);
     }
 }
+
+void WLAN_Input_Weight::onFileDoubleClicked(const QModelIndex &index)
+{
+    if (!index.isValid()) return;
+
+    QStandardItem *item = m_fileModel->item(index.row());
+    if (!item) return;
+
+    bool isDir = item->data(Qt::UserRole + 1).toBool();
+    QString name = item->data(Qt::UserRole).toString();
+
+    if (isDir) {
+        browseDir(m_currentRemotePath + "/" + name);
+    }
+}
+
+void WLAN_Input_Weight::onUpButtonClicked()
+{
+    if (m_currentRemotePath.isEmpty() || m_currentRemotePath == "/") return;
+
+    int lastSlash = m_currentRemotePath.lastIndexOf('/');
+    if (lastSlash <= 0) {
+        browseDir("/");
+    } else {
+        browseDir(m_currentRemotePath.left(lastSlash));
+    }
+}
+
+// ============================================================
+// 拉取 + 解析
+// ============================================================
 
 void WLAN_Input_Weight::onParseSelected()
 {
-    //收集所有勾选的离线诊断ID文件夹
-    QStringList checkedIds;
-    QTreeWidgetItemIterator it(ui->fileTree);
-    while (*it) {
-        QTreeWidgetItem *item = *it;
-        if (item->checkState(0) == Qt::Checked) {
-            checkedIds << extractFolderName(item->text(0));
-        }
-        ++it;
-    }
-
-    if (checkedIds.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("无可解析文件"),
-            QStringLiteral("请先在文件浏览中勾选\"离线诊断ID\"文件夹。"));
+    if (m_currentSerial.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("未选择设备"),
+            QStringLiteral("请先在设备列表中选择一台已连接的设备。"));
         return;
     }
 
-    //TODO: 对已传输到本地的文件调用 CacheFileParser::Cathe_Parse()
-    //暂时用Demo数据填充预览树：每个ID生成一个可展开的"菜单列表"
-    ui->previewTree->blockSignals(true);
-    ui->previewTree->clear();
+    //收集选中的目录
+    QStringList selectedPaths;
+    const auto selectedIndexes = ui->fileList->selectionModel()->selectedRows();
+    for (const auto &index : selectedIndexes) {
+        QStandardItem *item = m_fileModel->item(index.row());
+        if (!item) continue;
 
-    for (const QString &id : checkedIds) {
-        auto *folderItem = new QTreeWidgetItem({"📁 " + id, ""});
-        folderItem->setCheckState(0, Qt::Unchecked);
-
-        //Demo数据：根据离线诊断ID显示不同信息
-        if (id == "328668592") {
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("标题"), QStringLiteral("【测试】示例视频标题")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("UP主"), QStringLiteral("测试用户")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("Bv号"), "BV1xx411c7mD"}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("分P"), QStringLiteral("第1页 - 正片 / 第2页 - 第二P")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("大小"), "154.6 MB"}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("✓ 已解析 (2P)")}));
-        } else if (id == "S_46752") {
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("标题"), QStringLiteral("我们渡江了 第1季")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("UP主"), QStringLiteral("番剧官方")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("Bv号"), "—"}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("分P"), QStringLiteral("第1话 - 渡江 / 第2话 - 到达")}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("大小"), "202.4 MB"}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("✓ 已解析 (2话)")}));
-        } else {
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("标题"), id}));
-            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("✓ 已解析")}));
+        bool isDir = item->data(Qt::UserRole + 1).toBool();
+        QString name = item->data(Qt::UserRole).toString();
+        if (isDir) {
+            selectedPaths << (m_currentRemotePath + "/" + name);
         }
-
-        ui->previewTree->addTopLevelItem(folderItem);
     }
 
-    ui->previewTree->blockSignals(false);
+    if (selectedPaths.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("未选择文件夹"),
+            QStringLiteral("请先在文件浏览中选择一个或多个文件夹。\n"
+                           "（选中离线诊断ID文件夹后点击解析）"));
+        return;
+    }
 
-    //重置全选状态
+    //初始化拉取队列
+    m_pullQueue = selectedPaths;
+    m_pullTotal = selectedPaths.size();
+    m_pullCompleted = 0;
+
+    //清空预览树
+    ui->previewTree->blockSignals(true);
+    ui->previewTree->clear();
+    ui->previewTree->blockSignals(false);
     ui->selectAllCheck->blockSignals(true);
     ui->selectAllCheck->setChecked(false);
     ui->selectAllCheck->blockSignals(false);
+
+    //开始拉取
+    ui->parseBtn->setEnabled(false);
+    startNextPull();
 }
+
+void WLAN_Input_Weight::startNextPull()
+{
+    if (m_pullQueue.isEmpty()) {
+        //全部完成
+        ui->progressBar->setValue(100);
+        ui->progressLabel->setText(
+            QStringLiteral("完成：已解析 %1/%2").arg(m_pullCompleted).arg(m_pullTotal));
+        ui->parseBtn->setEnabled(true);
+        return;
+    }
+
+    QString remotePath = m_pullQueue.takeFirst();
+    QString folderName = remotePath.section('/', -1);
+    QString localPath = m_localPullDir + "/" + folderName;
+
+    ui->progressLabel->setText(
+        QStringLiteral("拉取中 (%1/%2): %3").arg(m_pullCompleted + 1).arg(m_pullTotal).arg(folderName));
+
+    m_adb->pullFile(m_currentSerial, remotePath, localPath);
+}
+
+void WLAN_Input_Weight::onPullProgressChanged(int percentage)
+{
+    ui->progressBar->setValue(percentage);
+}
+
+void WLAN_Input_Weight::onPullFinished(const QString &localPath, bool success, const QString &message)
+{
+    m_pullCompleted++;
+
+    if (success) {
+        parsePulledFolder(localPath);
+    } else {
+        Logger::instance()->warning("WLAN_Input", QString("拉取失败: %1").arg(message));
+        //在预览树中显示失败项
+        QString folderName = QFileInfo(localPath).fileName();
+        ui->previewTree->blockSignals(true);
+        auto *failItem = new QTreeWidgetItem({"📁 " + folderName, ""});
+        failItem->setCheckState(0, Qt::Unchecked);
+        failItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("❌ 拉取失败")}));
+        ui->previewTree->addTopLevelItem(failItem);
+        ui->previewTree->blockSignals(false);
+    }
+
+    startNextPull();
+}
+
+void WLAN_Input_Weight::parsePulledFolder(const QString &localPath)
+{
+    CacheFileParser parser;
+    QList<ParsedCacheData> parsedList;
+    bool ok = parser.Cathe_Parse(localPath, parsedList);
+
+    QString folderName = QFileInfo(localPath).fileName();
+
+    ui->previewTree->blockSignals(true);
+
+    auto *folderItem = new QTreeWidgetItem({"📁 " + folderName, ""});
+    folderItem->setCheckState(0, Qt::Unchecked);
+
+    if (ok && !parsedList.isEmpty()) {
+        //多P场景：取第一个的有效信息作为标题/UP主/Bv号（同一视频各P信息一致）
+        const auto &first = parsedList.first();
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("标题"), first.videoInfo.title}));
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("UP主"), first.videoInfo.ownerName}));
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("Bv号"), first.videoInfo.bvid}));
+
+        //分P信息：列出所有已解析的P
+        if (parsedList.size() > 1) {
+            folderItem->addChild(new QTreeWidgetItem(
+                {QStringLiteral("分P"), QStringLiteral("共 %1 个分P").arg(parsedList.size())}));
+        } else {
+            folderItem->addChild(new QTreeWidgetItem({QStringLiteral("分P"), QStringLiteral("单P")}));
+        }
+
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("大小"), formatSize(dirSize(localPath))}));
+        folderItem->addChild(new QTreeWidgetItem(
+            {QStringLiteral("状态"), QStringLiteral("✓ 已解析 (%1P)").arg(parsedList.size())}));
+    } else {
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("❌ 解析失败")}));
+    }
+
+    ui->previewTree->addTopLevelItem(folderItem);
+    ui->previewTree->blockSignals(false);
+}
+
+// ============================================================
+// 预览/导入
+// ============================================================
 
 void WLAN_Input_Weight::onConfirmImport()
 {
@@ -306,7 +530,6 @@ void WLAN_Input_Weight::onConfirmImport()
 
 void WLAN_Input_Weight::onSelectAllChanged(bool checked)
 {
-    //全选/全不选：同步所有顶层项的勾选状态
     ui->previewTree->blockSignals(true);
     Qt::CheckState state = checked ? Qt::Checked : Qt::Unchecked;
     for (int i = 0; i < ui->previewTree->topLevelItemCount(); ++i) {
@@ -322,7 +545,7 @@ void WLAN_Input_Weight::onPreviewItemChanged(QTreeWidgetItem *item, int column)
     //只处理顶层项（离线诊断ID文件夹）的勾选状态变化
     if (ui->previewTree->indexOfTopLevelItem(item) < 0) return;
 
-    //根据顶层项勾选情况更新"全选"复选框（全部勾选时才选中）
+    //根据顶层项勾选情况更新"全选"复选框
     int total = ui->previewTree->topLevelItemCount();
     int checkedCount = 0;
     for (int i = 0; i < total; ++i) {
@@ -335,41 +558,14 @@ void WLAN_Input_Weight::onPreviewItemChanged(QTreeWidgetItem *item, int column)
     ui->selectAllCheck->blockSignals(false);
 }
 
-void WLAN_Input_Weight::onWifiSelectionChanged(int index)
+// ============================================================
+// ADB错误处理
+// ============================================================
+
+void WLAN_Input_Weight::onAdbError(const QString &errorMsg)
 {
-    if (index <= 0) {
-        //"选择WiFi网络..." — 隐藏密码和连接按钮
-        ui->passwordEdit->hide();
-        ui->connectBtn->hide();
-        return;
-    }
-
-    QString text = ui->wifiCombo->itemText(index);
-    bool secured = text.contains("🔒");
-
-    if (secured) {
-        ui->passwordEdit->show();
-        ui->connectBtn->show();
-        ui->connectBtn->setText(QStringLiteral("连接"));
-    } else {
-        //开放网络：无需密码
-        ui->passwordEdit->hide();
-        ui->connectBtn->show();
-        ui->connectBtn->setText(QStringLiteral("连接"));
-    }
-}
-
-void WLAN_Input_Weight::onConnectWifi()
-{
-    //TODO: 实际WiFi连接逻辑（调用系统API或 WlanManager）
-    QString network = ui->wifiCombo->currentText();
-    QMessageBox::information(this, QStringLiteral("连接WiFi"),
-        QStringLiteral("正在连接到 %1 ...").arg(network));
-}
-
-void WLAN_Input_Weight::onUpButtonClicked()
-{
-    //TODO: 向远程设备发送 RequestDirList 请求上级路径
-    QMessageBox::information(this, QStringLiteral("上级目录"),
-                             QStringLiteral("TODO: 返回上级目录"));
+    Logger::instance()->warning("WLAN_Input", QString("ADB错误: %1").arg(errorMsg));
+    QMessageBox::warning(this, QStringLiteral("ADB错误"), errorMsg);
+    ui->refreshBtn->setEnabled(true);
+    ui->parseBtn->setEnabled(true);
 }
