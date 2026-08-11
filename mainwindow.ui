@@ -312,36 +312,6 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="Link_Input_Btn">
-             <property name="minimumSize">
-              <size>
-               <width>180</width>
-               <height>36</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>16777215</width>
-               <height>36</height>
-              </size>
-             </property>
-             <property name="font">
-              <font>
-               <pointsize>11</pointsize>
-              </font>
-             </property>
-             <property name="text">
-              <string>外部设备有线导入</string>
-             </property>
-             <property name="iconSize">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </widget>
-           </item>
-           <item>
             <widget class="QPushButton" name="WLAN_Input_Btn">
              <property name="minimumSize">
               <size>
@@ -361,7 +331,7 @@
               </font>
              </property>
              <property name="text">
-              <string>外部设备无线导入</string>
+              <string>外部设备导入</string>
              </property>
              <property name="iconSize">
               <size>

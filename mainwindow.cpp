@@ -9,7 +9,6 @@
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
-#include "Secondary_UI/Link_Input_Weight.h"
 #include "Secondary_UI/WLAN_Input_Weight.h"
 #include <QHeaderView>
 #include <QContextMenuEvent>
@@ -305,21 +304,7 @@ void MainWindow::on_Setting_Btn_clicked()
 }
 
 //导入按钮组
-//外部有线导入按钮：打开有线导入窗口(复用同一实例)
-void MainWindow::on_Link_Input_Btn_clicked()
-{
-    if (!m_linkInputWindow) {
-        m_linkInputWindow = new Link_Input_Weight(this);
-        //以独立顶层窗口形式显示(而非嵌入主窗口)
-        m_linkInputWindow->setWindowFlag(Qt::Window);
-    }
-    m_linkInputWindow->show();
-    m_linkInputWindow->raise();
-    m_linkInputWindow->activateWindow();
-}
-
-
-//外部无线导入按钮：打开无线导入窗口(复用同一实例)
+//外部设备导入按钮：打开ADB设备导入窗口(复用同一实例，支持USB/WiFi两种连接)
 void MainWindow::on_WLAN_Input_Btn_clicked()
 {
     if (!m_wlanInputWindow) {
