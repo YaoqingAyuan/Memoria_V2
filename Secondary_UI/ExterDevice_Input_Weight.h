@@ -1,15 +1,17 @@
-#ifndef WLAN_INPUT_WEIGHT_H
-#define WLAN_INPUT_WEIGHT_H
+#ifndef EXTERDEVICE_INPUT_WEIGHT_H
+#define EXTERDEVICE_INPUT_WEIGHT_H
 //ADB无线导入窗口：通过adb.exe与Android设备通信，浏览并拉取缓存文件
 //后端：AdbModule（设备发现/配对/连接/目录浏览/文件拉取）
 //UI静态布局由 .ui 文件管理，运行时配置在 initUI() 中完成
 
 #include <QWidget>
 #include <QList>
+#include <QMap>
 #include <QString>
+#include "Core/ParsedCacheData.h"
 
 namespace Ui {
-class WLAN_Input_Weight;
+class ExterDevice_Input_Weight;
 }
 
 class QTreeWidgetItem;
@@ -18,19 +20,18 @@ class QModelIndex;
 class AdbModule;
 struct AdbDeviceInfo;
 struct AdbDirEntry;
-class ParsedCacheData;
 
-class WLAN_Input_Weight : public QWidget
+class ExterDevice_Input_Weight : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit WLAN_Input_Weight(QWidget *parent = nullptr);
-    ~WLAN_Input_Weight();
+    explicit ExterDevice_Input_Weight(QWidget *parent = nullptr);
+    ~ExterDevice_Input_Weight();
 
 signals:
     //确认导入：通知MainWindow将解析好的数据写入DataModel表格
-    void importConfirmed();
+    void importConfirmed(const QList<ParsedCacheData> &dataList);
 
 private slots:
     //=== ADB设备管理 ===
@@ -66,7 +67,7 @@ private:
     void startNextPull();                             //从拉取队列取下一项执行
     void parsePulledFolder(const QString &localPath); //解析已拉取到本地的文件夹
 
-    Ui::WLAN_Input_Weight *ui;
+    Ui::ExterDevice_Input_Weight *ui;
     AdbModule *m_adb;
     QStandardItemModel *m_fileModel;     //远程文件列表数据模型
 
@@ -80,8 +81,11 @@ private:
     int m_pullCompleted = 0;             //已完成拉取数
     QString m_localPullDir;              //本地拉取暂存目录
 
+    //解析结果缓存：folderName → 解析出的P列表（onConfirmImport时取出勾选项）
+    QMap<QString, QList<ParsedCacheData>> m_parsedData;
+
     //B站缓存默认根路径
     static const QString BILI_CACHE_ROOT;
 };
 
-#endif // WLAN_INPUT_WEIGHT_H
+#endif // EXTERDEVICE_INPUT_WEIGHT_H

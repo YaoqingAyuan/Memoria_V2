@@ -4,7 +4,7 @@
 //桥接网络事件到 UI 与现有数据主线(CacheFileParser→ParsedCacheData→DataModel)
 //对应原理图的 ImportSession（改名以体现"协调者"角色）
 //
-//这是唯一与 MainWindow/WLAN_Input_Weight 直接对话的类：
+//这是唯一与 MainWindow/ExterDevice_Input_Weight 直接对话的类：
 //  - 接收侧：discovery + server 信号汇总后对外暴露
 //  - 发送侧：sendToPeer 创建临时 client
 //  - 收齐一批文件后 emit importBatchDone(顶层目录)，供主窗口走解析主线

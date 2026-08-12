@@ -2,6 +2,7 @@
 #include "./ui_mainwindow.h"
 #include "Core/DataModel.h"
 #include "Core/ParsedCacheData.h"
+#include "Core/CacheManager.h"
 #include "TaskQueue/TaskQueue.h"
 #include "FFmpeg_Module/FFmpeg_module.h"
 #include "Parser_Module/CacheFileParser.h"
@@ -9,7 +10,7 @@
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
-#include "Secondary_UI/WLAN_Input_Weight.h"
+#include "Secondary_UI/ExterDevice_Input_Weight.h"
 #include <QHeaderView>
 #include <QContextMenuEvent>
 #include <QFileDialog>
@@ -17,8 +18,8 @@
 #include <QTreeView>
 #include <QDateTime>
 #include <QMessageBox>
+#include <QCloseEvent>
 #include <algorithm>
-#include "Core/utils.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -51,6 +52,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     //设置表格右键菜单
     setupTableContextMenu();
+
+    //缓存管理：启动时清理过期缓存（崩溃恢复 + 过期清理）
+    auto &cm = CacheManager::instance();
+    cm.cleanExpired(cm.expiryDays());
+
+    //单个导出任务完成 → 成功则删除对应缓存
+    connect(m_taskQueue, &TaskQueue::taskFinished, this, &MainWindow::onTaskFinished);
 }
 
 MainWindow::~MainWindow()
@@ -146,10 +154,12 @@ void MainWindow::setupTableContextMenu()
                 }
                 std::sort(rows.begin(), rows.end(), std::greater<int>());
                 for (int r : rows) {
+                    deleteCacheForRow(r);
                     m_dataModel->removeRow(r);
                 }
             } else {
                 //单行删除
+                deleteCacheForRow(index.row());
                 m_dataModel->removeRow(index.row());
             }
         } else if (selected == clearAction) {
@@ -224,6 +234,7 @@ void MainWindow::on_OutputBtn_clicked()
     }
 
     //启动任务队列(异步执行，不阻塞UI)
+    m_exportRowIndices = requestRowIndices;  //保存行索引映射，供onTaskFinished使用
     m_taskQueue->start(requests, requestRowIndices);
 }
 
@@ -268,6 +279,7 @@ void MainWindow::on_DeleteLine_Btn_clicked()
 
     //逐行删除(从后往前)
     for (int row : rows) {
+        deleteCacheForRow(row);
         m_dataModel->removeRow(row);
     }
 }
@@ -305,15 +317,18 @@ void MainWindow::on_Setting_Btn_clicked()
 
 //导入按钮组
 //外部设备导入按钮：打开ADB设备导入窗口(复用同一实例，支持USB/WiFi两种连接)
-void MainWindow::on_WLAN_Input_Btn_clicked()
+void MainWindow::on_ExterDevice_Input_Btn_clicked()
 {
-    if (!m_wlanInputWindow) {
-        m_wlanInputWindow = new WLAN_Input_Weight(this);
-        m_wlanInputWindow->setWindowFlag(Qt::Window);
+    if (!m_exterDeviceInputWindow) {
+        m_exterDeviceInputWindow = new ExterDevice_Input_Weight(this);
+        m_exterDeviceInputWindow->setWindowFlag(Qt::Window);
+        //确认导入：将解析好的数据写入DataModel表格
+        connect(m_exterDeviceInputWindow, &ExterDevice_Input_Weight::importConfirmed,
+                this, &MainWindow::onImportConfirmed);
     }
-    m_wlanInputWindow->show();
-    m_wlanInputWindow->raise();
-    m_wlanInputWindow->activateWindow();
+    m_exterDeviceInputWindow->show();
+    m_exterDeviceInputWindow->raise();
+    m_exterDeviceInputWindow->activateWindow();
 }
 
 
@@ -366,4 +381,70 @@ void MainWindow::on_LocalCache_Btn_clicked()
         QMessageBox::information(this, QStringLiteral("导入完成"),
             QStringLiteral("成功导入 %1 条数据，%2 个文件夹解析失败").arg(totalImported).arg(failCount));
     }
+}
+
+//外部设备导入确认：接收ExterDevice_Input_Weight传来的解析数据，逐条写入DataModel
+void MainWindow::onImportConfirmed(const QList<ParsedCacheData> &dataList)
+{
+    int count = 0;
+    for (const ParsedCacheData &data : dataList) {
+        m_dataModel->setRowData(-1, data);  //-1=追加到末尾
+        count++;
+    }
+
+    if (count > 0) {
+        QMessageBox::information(this, QStringLiteral("导入成功"),
+            QStringLiteral("已从外部设备导入 %1 条数据").arg(count));
+    }
+}
+
+// ============================================================
+// 缓存生命周期管理
+// ============================================================
+
+//删除指定行对应的ADB缓存（若该行数据来源于ADB导入）
+void MainWindow::deleteCacheForRow(int row)
+{
+    if (row < 0 || row >= m_dataModel->rowCount())
+        return;
+
+    const ParsedCacheData &data = m_dataModel->getRowData(row);
+    QString cachePath = data.videoInfo.cacheRootPath;
+
+    //仅当路径位于缓存目录内时才删除（本地导入的文件不删）
+    auto &cm = CacheManager::instance();
+    if (cm.isInCacheDir(cachePath)) {
+        QString folderName = cm.folderNameFromPath(cachePath);
+        if (!folderName.isEmpty()) {
+            cm.deleteFolder(folderName);
+        }
+    }
+}
+
+//单个导出任务完成：成功则删除对应缓存（混流已产出，缓存不再需要）
+void MainWindow::onTaskFinished(int taskIndex, bool success, const QString &message)
+{
+    Q_UNUSED(message)
+    if (!success)
+        return;
+
+    //通过成员变量映射 taskIndex → 表格行索引
+    if (taskIndex < 0 || taskIndex >= m_exportRowIndices.size())
+        return;
+
+    int row = m_exportRowIndices[taskIndex];
+    deleteCacheForRow(row);
+}
+
+//窗口关闭事件：根据设置清理缓存
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    auto &cm = CacheManager::instance();
+    if (cm.cleanOnClose()) {
+        cm.cleanAll();
+    } else {
+        cm.cleanExpired(cm.expiryDays());
+    }
+
+    QMainWindow::closeEvent(event);
 }

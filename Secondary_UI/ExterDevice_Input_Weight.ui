@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>WLAN_Input_Weight</class>
- <widget class="QWidget" name="WLAN_Input_Weight">
+ <class>ExterDevice_Input_Weight</class>
+ <widget class="QWidget" name="ExterDevice_Input_Weight">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -97,6 +97,16 @@
        <widget class="QPushButton" name="connectDeviceBtn">
         <property name="text">
          <string>连接</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="pairStatusLabel">
+        <property name="styleSheet">
+         <string notr="true">color: #71717A; font-size: 12px; padding-left: 4px;</string>
+        </property>
+        <property name="text">
+         <string>⚪ 未配对</string>
         </property>
        </widget>
       </item>

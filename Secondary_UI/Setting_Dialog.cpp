@@ -1,6 +1,8 @@
 #include "Setting_Dialog.h"
 #include "ui_Setting_Dialog.h"
 #include "../Core/DataModel.h"
+#include "../Core/CacheManager.h"
+#include <QMessageBox>
 
 Setting_Dialog::Setting_Dialog(DataModel *model, QWidget *parent)
     : QDialog(parent)
@@ -8,8 +10,24 @@ Setting_Dialog::Setting_Dialog(DataModel *model, QWidget *parent)
     , m_model(model)
 {
     ui->setupUi(this);
-    //从配置加载当前列可见性状态到复选框
+
+    //Tab1：列头设置
     syncCheckboxesFromSettings();
+
+    //Tab2：缓存管理
+    //填充过期天数下拉（1-30天）
+    for (int i = 1; i <= 30; ++i)
+        ui->combo_expiryDays->addItem(QString::number(i), i);
+    loadCacheSettings();
+    refreshCacheSize();
+
+    //Tab2信号槽连接
+    connect(ui->cb_cleanOnClose, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state) {
+        onCleanOnCloseChanged(static_cast<int>(state));
+    });
+    connect(ui->btn_cleanCacheNow, &QPushButton::clicked, this, &Setting_Dialog::onCleanCacheNowClicked);
+    connect(ui->combo_expiryDays, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &Setting_Dialog::onExpiryDaysChanged);
 }
 
 Setting_Dialog::~Setting_Dialog()
@@ -76,4 +94,83 @@ void Setting_Dialog::syncCheckboxesFromSettings()
     ui->cb_fileSize->setChecked(settings.value("Table/OptionalCol_7", false).toBool());
     ui->cb_danmakuCount->setChecked(settings.value("Table/OptionalCol_8", false).toBool());
     ui->cb_resolution->setChecked(settings.value("Table/OptionalCol_9", true).toBool());
+}
+
+// ============================================================
+// Tab2：缓存管理
+// ============================================================
+
+//加载缓存设置到UI
+void Setting_Dialog::loadCacheSettings()
+{
+    auto &cm = CacheManager::instance();
+
+    //关闭时清理
+    bool cleanOnClose = cm.cleanOnClose();
+    ui->cb_cleanOnClose->setChecked(cleanOnClose);
+
+    //过期天数
+    int days = cm.expiryDays();
+    int index = ui->combo_expiryDays->findData(days);
+    if (index >= 0)
+        ui->combo_expiryDays->setCurrentIndex(index);
+
+    //根据CheckBox状态启用/禁用下拉
+    ui->combo_expiryDays->setEnabled(!cleanOnClose);
+    ui->label_expiry->setEnabled(!cleanOnClose);
+    ui->label_expirySuffix->setEnabled(!cleanOnClose);
+    ui->label_expiryHint->setEnabled(!cleanOnClose);
+}
+
+//刷新缓存大小显示
+void Setting_Dialog::refreshCacheSize()
+{
+    qint64 size = CacheManager::instance().cacheSize();
+    ui->label_cacheSize->setText(
+        QStringLiteral("当前缓存: %1").arg(CacheManager::formatSize(size)));
+}
+
+//关闭时清理CheckBox状态变化
+void Setting_Dialog::onCleanOnCloseChanged(int state)
+{
+    bool checked = (state == Qt::Checked);
+    CacheManager::instance().setCleanOnClose(checked);
+
+    //勾选时禁用过期天数选项（关闭时已全量清理，无需过期策略）
+    ui->combo_expiryDays->setEnabled(!checked);
+    ui->label_expiry->setEnabled(!checked);
+    ui->label_expirySuffix->setEnabled(!checked);
+    ui->label_expiryHint->setEnabled(!checked);
+}
+
+//手动清理全部缓存
+void Setting_Dialog::onCleanCacheNowClicked()
+{
+    auto &cm = CacheManager::instance();
+    qint64 beforeSize = cm.cacheSize();
+    if (beforeSize == 0) {
+        QMessageBox::information(this, QStringLiteral("缓存清理"),
+            QStringLiteral("缓存为空，无需清理。"));
+        return;
+    }
+
+    auto ret = QMessageBox::question(this, QStringLiteral("确认清理"),
+        QStringLiteral("将清理全部缓存（%1），此操作不可撤销。\n确定继续？")
+            .arg(CacheManager::formatSize(beforeSize)),
+        QMessageBox::Yes | QMessageBox::No);
+    if (ret != QMessageBox::Yes)
+        return;
+
+    cm.cleanAll();
+    refreshCacheSize();
+    QMessageBox::information(this, QStringLiteral("清理完成"),
+        QStringLiteral("已释放 %1 缓存空间。")
+            .arg(CacheManager::formatSize(beforeSize)));
+}
+
+//过期天数变化
+void Setting_Dialog::onExpiryDaysChanged(int index)
+{
+    int days = ui->combo_expiryDays->itemData(index).toInt();
+    CacheManager::instance().setExpiryDays(days);
 }

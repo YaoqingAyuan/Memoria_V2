@@ -34,13 +34,14 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         Core/utils.h
         Parser_Module/CacheFileParser.h Parser_Module/CacheFileParser.cpp
         Core/DataModel.h Core/DataModel.cpp
+        Core/CacheManager.h Core/CacheManager.cpp
 
         Core/logger.h Core/logger.cpp
         Secondary_UI/Output_Setting_Dlog.h Secondary_UI/Output_Setting_Dlog.cpp Secondary_UI/Output_Setting_Dlog.ui
         Secondary_UI/VideoPlayback_Weight.h Secondary_UI/VideoPlayback_Weight.cpp Secondary_UI/VideoPlayback_Weight.ui
         Secondary_UI/Independ_Import_Dialog.h Secondary_UI/Independ_Import_Dialog.cpp Secondary_UI/Independ_Import_Dialog.ui
         Secondary_UI/Link_Input_Weight.h Secondary_UI/Link_Input_Weight.cpp Secondary_UI/Link_Input_Weight.ui
-        Secondary_UI/WLAN_Input_Weight.h Secondary_UI/WLAN_Input_Weight.cpp Secondary_UI/WLAN_Input_Weight.ui
+        Secondary_UI/ExterDevice_Input_Weight.h Secondary_UI/ExterDevice_Input_Weight.cpp Secondary_UI/ExterDevice_Input_Weight.ui
         Secondary_UI/Setting_Dialog.h Secondary_UI/Setting_Dialog.cpp Secondary_UI/Setting_Dialog.ui
         WLAN_Module/WlanTypes.h
         WLAN_Module/WlanProtocol.h WLAN_Module/WlanProtocol.cpp

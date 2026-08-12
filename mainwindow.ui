@@ -312,7 +312,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="WLAN_Input_Btn">
+            <widget class="QPushButton" name="ExterDevice_Input_Btn">
              <property name="minimumSize">
               <size>
                <width>180</width>

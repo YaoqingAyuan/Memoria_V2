@@ -1,9 +1,10 @@
-#include "WLAN_Input_Weight.h"
-#include "ui_WLAN_Input_Weight.h"
+#include "ExterDevice_Input_Weight.h"
+#include "ui_ExterDevice_Input_Weight.h"
 
 #include "ADB_Module/AdbModule.h"
 #include "Parser_Module/CacheFileParser.h"
 #include "Core/ParsedCacheData.h"
+#include "Core/CacheManager.h"
 #include "Core/logger.h"
 
 #include <QStandardItemModel>
@@ -17,7 +18,7 @@
 #include <QFileInfo>
 
 //B站缓存默认根路径
-const QString WLAN_Input_Weight::BILI_CACHE_ROOT = "/sdcard/Android/data/tv.danmaku.bili/download";
+const QString ExterDevice_Input_Weight::BILI_CACHE_ROOT = "/sdcard/Android/data/tv.danmaku.bili/download";
 
 //辅助：格式化文件大小
 static QString formatSize(qint64 bytes)
@@ -56,9 +57,9 @@ static QString extractFolderName(const QString &displayText)
 // 构造/析构
 // ============================================================
 
-WLAN_Input_Weight::WLAN_Input_Weight(QWidget *parent)
+ExterDevice_Input_Weight::ExterDevice_Input_Weight(QWidget *parent)
     : QWidget(parent)
-    , ui(new Ui::WLAN_Input_Weight)
+    , ui(new Ui::ExterDevice_Input_Weight)
     , m_adb(new AdbModule(this))
     , m_fileModel(new QStandardItemModel(this))
 {
@@ -70,9 +71,8 @@ WLAN_Input_Weight::WLAN_Input_Weight(QWidget *parent)
     updateAdbStatus(!adbPath.isEmpty(),
                     adbPath.isEmpty() ? QStringLiteral("ADB: 未找到") : QStringLiteral("ADB: 就绪"));
 
-    //设置本地拉取暂存目录
-    m_localPullDir = QDir::tempPath() + "/Memoria_ADB_Pull";
-    QDir().mkpath(m_localPullDir);
+    //设置本地拉取暂存目录（使用AppLocalData，不被系统自动清理）
+    m_localPullDir = CacheManager::instance().cacheDir();
 
     //自检通过则自动刷新设备列表
     if (!adbPath.isEmpty()) {
@@ -80,7 +80,7 @@ WLAN_Input_Weight::WLAN_Input_Weight(QWidget *parent)
     }
 }
 
-WLAN_Input_Weight::~WLAN_Input_Weight()
+ExterDevice_Input_Weight::~ExterDevice_Input_Weight()
 {
     delete ui;
 }
@@ -89,7 +89,7 @@ WLAN_Input_Weight::~WLAN_Input_Weight()
 // initUI: .ui无法表达的运行时配置
 // ============================================================
 
-void WLAN_Input_Weight::initUI()
+void ExterDevice_Input_Weight::initUI()
 {
     //三栏比例：左固定 / 中弹性 / 右固定
     ui->splitter->setStretchFactor(0, 0);
@@ -114,45 +114,59 @@ void WLAN_Input_Weight::initUI()
 
     //=== UI信号/槽连接 ===
     //ADB设备管理
-    connect(ui->refreshBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onRefreshDevices);
-    connect(ui->pairBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onPairDevice);
-    connect(ui->connectDeviceBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConnectDevice);
+    connect(ui->refreshBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onRefreshDevices);
+    connect(ui->pairBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onPairDevice);
+    connect(ui->connectDeviceBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onConnectDevice);
     connect(ui->deviceList, &QListWidget::customContextMenuRequested,
-            this, &WLAN_Input_Weight::onDeviceContextMenu);
+            this, &ExterDevice_Input_Weight::onDeviceContextMenu);
     connect(ui->deviceList, &QListWidget::itemSelectionChanged,
-            this, &WLAN_Input_Weight::onDeviceSelectionChanged);
+            this, &ExterDevice_Input_Weight::onDeviceSelectionChanged);
 
     //远程文件浏览
     connect(ui->fileList, &QListView::doubleClicked,
-            this, &WLAN_Input_Weight::onFileDoubleClicked);
-    connect(ui->upBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onUpButtonClicked);
+            this, &ExterDevice_Input_Weight::onFileDoubleClicked);
+    connect(ui->upBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onUpButtonClicked);
 
     //拉取/解析
-    connect(ui->parseBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onParseSelected);
+    connect(ui->parseBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onParseSelected);
 
     //预览/导入
-    connect(ui->confirmBtn, &QPushButton::clicked, this, &WLAN_Input_Weight::onConfirmImport);
-    connect(ui->selectAllCheck, &QCheckBox::toggled, this, &WLAN_Input_Weight::onSelectAllChanged);
-    connect(ui->previewTree, &QTreeWidget::itemChanged, this, &WLAN_Input_Weight::onPreviewItemChanged);
+    connect(ui->confirmBtn, &QPushButton::clicked, this, &ExterDevice_Input_Weight::onConfirmImport);
+    connect(ui->selectAllCheck, &QCheckBox::toggled, this, &ExterDevice_Input_Weight::onSelectAllChanged);
+    connect(ui->previewTree, &QTreeWidget::itemChanged, this, &ExterDevice_Input_Weight::onPreviewItemChanged);
 
     //取消
     connect(ui->cancelBtn, &QPushButton::clicked, this, &QWidget::close);
 
     //=== AdbModule信号连接 ===
-    connect(m_adb, &AdbModule::deviceListChanged, this, &WLAN_Input_Weight::onDeviceListChanged);
-    connect(m_adb, &AdbModule::dirListReady, this, &WLAN_Input_Weight::onDirListReady);
-    connect(m_adb, &AdbModule::pullProgressChanged, this, &WLAN_Input_Weight::onPullProgressChanged);
-    connect(m_adb, &AdbModule::pullFinished, this, &WLAN_Input_Weight::onPullFinished);
-    connect(m_adb, &AdbModule::errorOccurred, this, &WLAN_Input_Weight::onAdbError);
+    connect(m_adb, &AdbModule::deviceListChanged, this, &ExterDevice_Input_Weight::onDeviceListChanged);
+    connect(m_adb, &AdbModule::dirListReady, this, &ExterDevice_Input_Weight::onDirListReady);
+    connect(m_adb, &AdbModule::pullProgressChanged, this, &ExterDevice_Input_Weight::onPullProgressChanged);
+    connect(m_adb, &AdbModule::pullFinished, this, &ExterDevice_Input_Weight::onPullFinished);
+    connect(m_adb, &AdbModule::errorOccurred, this, &ExterDevice_Input_Weight::onAdbError);
 
-    //配对/连接结果（简单弹窗反馈）
+    //配对/连接结果：更新状态标签 + 弹窗反馈
     connect(m_adb, &AdbModule::pairResult, this,
             [this](bool success, const QString &msg) {
+                if (success) {
+                    ui->pairStatusLabel->setStyleSheet("color: #16A34A; font-size: 12px; padding-left: 4px;");
+                    ui->pairStatusLabel->setText(QStringLiteral("✓ 已配对，请连接"));
+                } else {
+                    ui->pairStatusLabel->setStyleSheet("color: #EF4444; font-size: 12px; padding-left: 4px;");
+                    ui->pairStatusLabel->setText(QStringLiteral("✗ 配对失败"));
+                }
                 QMessageBox::information(this, QStringLiteral("配对结果"), msg);
                 if (success) onRefreshDevices();
             });
     connect(m_adb, &AdbModule::connectResult, this,
             [this](bool success, const QString &msg) {
+                if (success) {
+                    ui->pairStatusLabel->setStyleSheet("color: #16A34A; font-size: 12px; padding-left: 4px;");
+                    ui->pairStatusLabel->setText(QStringLiteral("✓ 已连接"));
+                } else {
+                    ui->pairStatusLabel->setStyleSheet("color: #EF4444; font-size: 12px; padding-left: 4px;");
+                    ui->pairStatusLabel->setText(QStringLiteral("✗ 连接失败"));
+                }
                 QMessageBox::information(this, QStringLiteral("连接结果"), msg);
                 if (success) onRefreshDevices();
             });
@@ -162,7 +176,7 @@ void WLAN_Input_Weight::initUI()
 // ADB状态更新
 // ============================================================
 
-void WLAN_Input_Weight::updateAdbStatus(bool ready, const QString &text)
+void ExterDevice_Input_Weight::updateAdbStatus(bool ready, const QString &text)
 {
     ui->adbStatusLabel->setText(text);
     if (ready) {
@@ -178,7 +192,7 @@ void WLAN_Input_Weight::updateAdbStatus(bool ready, const QString &text)
 // ADB设备管理
 // ============================================================
 
-void WLAN_Input_Weight::onRefreshDevices()
+void ExterDevice_Input_Weight::onRefreshDevices()
 {
     if (m_adb->getAdbPath().isEmpty()) {
         QMessageBox::critical(this, QStringLiteral("ADB未就绪"),
@@ -189,7 +203,7 @@ void WLAN_Input_Weight::onRefreshDevices()
     m_adb->refreshDevices();
 }
 
-void WLAN_Input_Weight::onPairDevice()
+void ExterDevice_Input_Weight::onPairDevice()
 {
     //配对需要两步输入：配对地址(IP:端口) + 配对码
     bool ok;
@@ -211,7 +225,7 @@ void WLAN_Input_Weight::onPairDevice()
     m_adb->pairDevice(parts[0], parts[1].toInt(), code.trimmed());
 }
 
-void WLAN_Input_Weight::onConnectDevice()
+void ExterDevice_Input_Weight::onConnectDevice()
 {
     QString text = ui->connectEdit->text().trimmed();
     if (text.isEmpty()) {
@@ -230,7 +244,7 @@ void WLAN_Input_Weight::onConnectDevice()
     m_adb->connectDevice(parts[0], parts[1].toInt());
 }
 
-void WLAN_Input_Weight::onDeviceListChanged(const QList<AdbDeviceInfo> &devices)
+void ExterDevice_Input_Weight::onDeviceListChanged(const QList<AdbDeviceInfo> &devices)
 {
     ui->deviceList->blockSignals(true);
     ui->deviceList->clear();
@@ -267,7 +281,7 @@ void WLAN_Input_Weight::onDeviceListChanged(const QList<AdbDeviceInfo> &devices)
     ui->refreshBtn->setEnabled(true);
 }
 
-void WLAN_Input_Weight::onDeviceSelectionChanged()
+void ExterDevice_Input_Weight::onDeviceSelectionChanged()
 {
     auto *item = ui->deviceList->currentItem();
     if (!item) return;
@@ -279,7 +293,7 @@ void WLAN_Input_Weight::onDeviceSelectionChanged()
     browseDir(m_currentRemotePath.isEmpty() ? BILI_CACHE_ROOT : m_currentRemotePath);
 }
 
-void WLAN_Input_Weight::onDeviceContextMenu(const QPoint &pos)
+void ExterDevice_Input_Weight::onDeviceContextMenu(const QPoint &pos)
 {
     auto *item = ui->deviceList->itemAt(pos);
     if (!item) return;
@@ -304,7 +318,7 @@ void WLAN_Input_Weight::onDeviceContextMenu(const QPoint &pos)
 // 远程文件浏览
 // ============================================================
 
-void WLAN_Input_Weight::browseDir(const QString &remotePath)
+void ExterDevice_Input_Weight::browseDir(const QString &remotePath)
 {
     if (m_currentSerial.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("未选择设备"),
@@ -316,7 +330,7 @@ void WLAN_Input_Weight::browseDir(const QString &remotePath)
     m_adb->listDir(m_currentSerial, remotePath);
 }
 
-void WLAN_Input_Weight::onDirListReady(const QString &path, const QList<AdbDirEntry> &entries)
+void ExterDevice_Input_Weight::onDirListReady(const QString &path, const QList<AdbDirEntry> &entries)
 {
     Q_UNUSED(path)
     m_fileModel->clear();
@@ -337,7 +351,7 @@ void WLAN_Input_Weight::onDirListReady(const QString &path, const QList<AdbDirEn
     }
 }
 
-void WLAN_Input_Weight::onFileDoubleClicked(const QModelIndex &index)
+void ExterDevice_Input_Weight::onFileDoubleClicked(const QModelIndex &index)
 {
     if (!index.isValid()) return;
 
@@ -352,7 +366,7 @@ void WLAN_Input_Weight::onFileDoubleClicked(const QModelIndex &index)
     }
 }
 
-void WLAN_Input_Weight::onUpButtonClicked()
+void ExterDevice_Input_Weight::onUpButtonClicked()
 {
     if (m_currentRemotePath.isEmpty() || m_currentRemotePath == "/") return;
 
@@ -368,7 +382,7 @@ void WLAN_Input_Weight::onUpButtonClicked()
 // 拉取 + 解析
 // ============================================================
 
-void WLAN_Input_Weight::onParseSelected()
+void ExterDevice_Input_Weight::onParseSelected()
 {
     if (m_currentSerial.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("未选择设备"),
@@ -415,7 +429,7 @@ void WLAN_Input_Weight::onParseSelected()
     startNextPull();
 }
 
-void WLAN_Input_Weight::startNextPull()
+void ExterDevice_Input_Weight::startNextPull()
 {
     if (m_pullQueue.isEmpty()) {
         //全部完成
@@ -436,12 +450,12 @@ void WLAN_Input_Weight::startNextPull()
     m_adb->pullFile(m_currentSerial, remotePath, localPath);
 }
 
-void WLAN_Input_Weight::onPullProgressChanged(int percentage)
+void ExterDevice_Input_Weight::onPullProgressChanged(int percentage)
 {
     ui->progressBar->setValue(percentage);
 }
 
-void WLAN_Input_Weight::onPullFinished(const QString &localPath, bool success, const QString &message)
+void ExterDevice_Input_Weight::onPullFinished(const QString &localPath, bool success, const QString &message)
 {
     m_pullCompleted++;
 
@@ -462,13 +476,18 @@ void WLAN_Input_Weight::onPullFinished(const QString &localPath, bool success, c
     startNextPull();
 }
 
-void WLAN_Input_Weight::parsePulledFolder(const QString &localPath)
+void ExterDevice_Input_Weight::parsePulledFolder(const QString &localPath)
 {
     CacheFileParser parser;
     QList<ParsedCacheData> parsedList;
     bool ok = parser.Cathe_Parse(localPath, parsedList);
 
     QString folderName = QFileInfo(localPath).fileName();
+
+    //缓存解析结果，供 onConfirmImport 取出勾选项
+    if (ok && !parsedList.isEmpty()) {
+        m_parsedData[folderName] = parsedList;
+    }
 
     ui->previewTree->blockSignals(true);
 
@@ -505,7 +524,7 @@ void WLAN_Input_Weight::parsePulledFolder(const QString &localPath)
 // 预览/导入
 // ============================================================
 
-void WLAN_Input_Weight::onConfirmImport()
+void ExterDevice_Input_Weight::onConfirmImport()
 {
     //收集预览树中所有勾选的离线诊断ID
     QStringList selectedIds;
@@ -523,12 +542,31 @@ void WLAN_Input_Weight::onConfirmImport()
         return;
     }
 
-    //TODO: 将解析好的 QList<ParsedCacheData> 通过信号发给 MainWindow
-    emit importConfirmed();
+    //从m_parsedData中取出勾选项的解析数据，合并为一个列表
+    QList<ParsedCacheData> importList;
+    for (const QString &folderName : selectedIds) {
+        auto it = m_parsedData.find(folderName);
+        if (it != m_parsedData.end()) {
+            for (const ParsedCacheData &data : it.value()) {
+                importList << data;
+            }
+        }
+    }
+
+    if (importList.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("无可用数据"),
+            QStringLiteral("所选文件夹无有效解析数据，无法导入。"));
+        return;
+    }
+
+    Logger::instance()->debug("ExterDevice",
+        QString("确认导入：共 %1 项，来自 %2 个文件夹").arg(importList.size()).arg(selectedIds.size()));
+
+    emit importConfirmed(importList);
     close();
 }
 
-void WLAN_Input_Weight::onSelectAllChanged(bool checked)
+void ExterDevice_Input_Weight::onSelectAllChanged(bool checked)
 {
     ui->previewTree->blockSignals(true);
     Qt::CheckState state = checked ? Qt::Checked : Qt::Unchecked;
@@ -538,7 +576,7 @@ void WLAN_Input_Weight::onSelectAllChanged(bool checked)
     ui->previewTree->blockSignals(false);
 }
 
-void WLAN_Input_Weight::onPreviewItemChanged(QTreeWidgetItem *item, int column)
+void ExterDevice_Input_Weight::onPreviewItemChanged(QTreeWidgetItem *item, int column)
 {
     if (column != 0) return;
 
@@ -562,7 +600,7 @@ void WLAN_Input_Weight::onPreviewItemChanged(QTreeWidgetItem *item, int column)
 // ADB错误处理
 // ============================================================
 
-void WLAN_Input_Weight::onAdbError(const QString &errorMsg)
+void ExterDevice_Input_Weight::onAdbError(const QString &errorMsg)
 {
     Logger::instance()->warning("WLAN_Input", QString("ADB错误: %1").arg(errorMsg));
     QMessageBox::warning(this, QStringLiteral("ADB错误"), errorMsg);
