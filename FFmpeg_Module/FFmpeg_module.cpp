@@ -32,14 +32,44 @@
 //将转码参数序列化为FFmpeg命令行参数列表(WEBM/VP9专用)
 QStringList TranscodeParams::toArgs() const {
     QStringList args;
-    args << "-c:v" << "libvpx-vp9";     //视频编码器：VP9
-    args << "-crf" << QString::number(crf); //恒定质量模式
-    args << "-b:v" << "0";              //启用CRF模式(必须设-b:v 0)
-    args << "-cpu-used" << QString::number(cpuUsed); //速度/质量权衡
-    args << "-c:a" << "libopus";        //音频编码器：Opus
-    args << "-b:a" << QString::number(audioBitrate) + "k"; //音频码率
-    args << "-application" << "audio";  //Opus针对语音/音乐优化
-    args << "-threads" << QString::number(threads); //编码线程数
+
+    //=== 视频参数 ===
+    args << "-c:v" << videoCodec;
+
+    if (lossless) {
+        //无损模式：忽略CRF/目标码率
+        args << "-lossless" << "1";
+    } else if (useCrf) {
+        //CRF恒定质量模式(必须设-b:v 0启用)
+        args << "-crf" << QString::number(crf);
+        args << "-b:v" << "0";
+    } else {
+        //目标码率模式
+        args << "-b:v" << QString::number(targetBitrateKbps) + "k";
+    }
+
+    args << "-deadline" << deadline;
+    args << "-cpu-used" << QString::number(cpuUsed);
+
+    //=== 音频参数 ===
+    args << "-c:a" << audioCodec;
+
+    if (audioCodec == QLatin1String("libopus")) {
+        //Opus：始终用码率控制，-application优化语音/音乐
+        args << "-b:a" << QString::number(audioBitrate) + "k";
+        args << "-application" << "audio";
+    } else {
+        //libvorbis：VBR用质量(-q:a)，CBR用码率(-b:a)
+        if (audioVbr) {
+            args << "-q:a" << QString::number(audioVbrQuality);
+        } else {
+            args << "-b:a" << QString::number(audioBitrate) + "k";
+        }
+    }
+
+    //=== 通用 ===
+    args << "-threads" << QString::number(threads);
+
     return args;
 }
 

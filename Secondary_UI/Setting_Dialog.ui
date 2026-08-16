@@ -302,7 +302,7 @@
         <string notr="true">color: #71717A; font-size: 11px;</string>
        </property>
        <property name="text">
-        <string>（仅在未勾选"关闭时清理"时生效）</string>
+        <string>（仅在未勾选&quot;关闭时清理&quot;时生效）</string>
        </property>
       </widget>
      </item>

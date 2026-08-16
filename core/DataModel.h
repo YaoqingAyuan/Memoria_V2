@@ -87,6 +87,8 @@ public:
     void updateRowStatus(int row);
     //设置导出进度(0-100)
     void setExportProgress(int row, int percent);
+    //标记导出失败：清空进度，状态回退为有效/无效(允许重试)
+    void markExportFailed(int row);
 
 private:
     //数据存储：每行一个ParsedCacheData

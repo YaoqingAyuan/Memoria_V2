@@ -27,11 +27,23 @@ enum class OutputFormat {
 
 //转码参数结构体：仅在WEBM等需转码格式时由UI填充并传入
 struct TranscodeParams {
-    //WEBM(VP9)参数
-    int crf = 30;           //恒定质量(0~63，30为平衡点)
-    int cpuUsed = 2;        //编码速度/质量权衡(0=慢质高，5=快速低质)
-    int audioBitrate = 128; //音频码率(kbps)
-    int threads = 4;        //编码线程数(按CPU核心数调整)
+    //=== 视频参数 ===
+    QString videoCodec = "libvpx-vp9";   //视频编码器(libvpx-vp9/libvpx)
+    bool useCrf = true;                   //true=CRF恒定质量, false=目标码率
+    int crf = 31;                         //恒定质量(0~63，仅useCrf=true且非无损时有效)
+    int targetBitrateKbps = 750;          //目标视频码率(kbps，仅useCrf=false且非无损时有效)
+    int cpuUsed = 2;                      //编码速度/质量权衡(0=慢质高，5=快速低质)
+    QString deadline = "good";            //deadline(best/good/realtime)
+    bool lossless = false;                //无损编码(启用时忽略CRF/码率)
+
+    //=== 音频参数 ===
+    QString audioCodec = "libopus";       //音频编码器(libopus/libvorbis)
+    bool audioVbr = true;                 //true=VBR可变比特率, false=CBR(仅libvorbis有效)
+    int audioVbrQuality = 4;              //VBR质量(0~10，仅libvorbis+VBR时有效)
+    int audioBitrate = 128;               //音频码率(kbps，libopus或CBR时有效)
+
+    //=== 通用 ===
+    int threads = 4;                      //编码线程数
 
     //将转码参数序列化为FFmpeg命令行参数列表
     QStringList toArgs() const;

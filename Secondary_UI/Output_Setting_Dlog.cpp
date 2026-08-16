@@ -99,8 +99,25 @@ void Output_Setting_Dlog::accept()
 
     //收集转码参数(仅WEBM有效，其余格式复制流不使用参数)
     if (m_format == OutputFormat::WEBM) {
+        //=== 视频参数 ===
+        m_params.videoCodec = (ui->VideoCodec_cmbBox->currentIndex() == 0)
+                              ? QStringLiteral("libvpx-vp9") : QStringLiteral("libvpx");
+        m_params.lossless = ui->Lossless_chkBox->isChecked();
+        m_params.useCrf = (ui->VideoQualityMode_cmbBox->currentIndex() == 0);
         m_params.crf = ui->CRF_slider->value();
+        //目标码率：解析数值+单位(kbps/Mbps)→统一转kbps
+        int bitrateVal = ui->TargetBitrate_Edit->text().trimmed().toInt();
+        if (bitrateVal <= 0) bitrateVal = 750;
+        m_params.targetBitrateKbps = (ui->BitrateUnit_cmbBox->currentIndex() == 1)
+                                     ? bitrateVal * 1000 : bitrateVal;
         m_params.cpuUsed = ui->CpuUsed_slider->value();
+        m_params.deadline = ui->Deadline_cmbBox->currentText();
+
+        //=== 音频参数 ===
+        m_params.audioCodec = (ui->AudioCodec_cmbBox->currentIndex() == 0)
+                              ? QStringLiteral("libopus") : QStringLiteral("libvorbis");
+        m_params.audioVbr = (ui->AudioBitrateMode_cmbBox->currentIndex() == 0);
+        m_params.audioVbrQuality = ui->AudioQuality_slider->value();
         //AudioBitrate_cmbBox文本如"128k"，提取数值部分
         QString bitrateText = ui->AudioBitrate_cmbBox->currentText();
         m_params.audioBitrate = bitrateText.remove('k').remove('K').trimmed().toInt();

@@ -35,6 +35,12 @@ Setting_Dialog::~Setting_Dialog()
     delete ui;
 }
 
+//切换到指定tab(0=列头设置, 1=缓存管理)
+void Setting_Dialog::setCurrentTab(int index)
+{
+    ui->tabWidget->setCurrentIndex(index);
+}
+
 //应用按钮：将复选框状态写入DataModel(会自动保存到配置并刷新表格)
 void Setting_Dialog::on_applyBtn_clicked()
 {

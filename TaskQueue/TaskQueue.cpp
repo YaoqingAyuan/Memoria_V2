@@ -110,6 +110,9 @@ void TaskQueue::onTaskFinished(bool success, const QString &message)
         if (success) {
             m_dataModel->setExportProgress(m_rowIndices[m_currentIndex], 100);
             m_completedRows.append(m_rowIndices[m_currentIndex]);
+        } else {
+            //失败：清空进度，状态回退为待导出(允许用户重试)
+            m_dataModel->markExportFailed(m_rowIndices[m_currentIndex]);
         }
     }
 

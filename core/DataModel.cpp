@@ -413,6 +413,28 @@ void DataModel::setExportProgress(int row, int percent)
     }
 }
 
+void DataModel::markExportFailed(int row)
+{
+    if (row < 0 || row >= m_rows.size())
+        return;
+    if (row >= m_progress.size())
+        m_progress.resize(m_rows.size(), -1);
+
+    m_progress[row] = -1;   //清空进度显示
+
+    //状态回退：临时置Empty绕过updateRowStatus的Exporting/Completed守卫，重新判定为Valid/Invalid
+    m_rows[row].rowStatus = Empty;
+    updateRowStatus(row);
+
+    //通知进度列+状态列更新
+    for (int i = 0; i < m_visibleColumnMap.size(); ++i) {
+        if (m_visibleColumnMap[i] == ColProgress || m_visibleColumnMap[i] == ColStatus) {
+            QModelIndex idx = index(row, i);
+            emit dataChanged(idx, idx);
+        }
+    }
+}
+
 //=== 私有辅助 ===
 
 void DataModel::rebuildColumnMap()

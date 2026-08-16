@@ -21,6 +21,9 @@ public:
     explicit Setting_Dialog(DataModel *model, QWidget *parent = nullptr);
     ~Setting_Dialog();
 
+    //切换到指定tab(0=列头设置, 1=缓存管理)
+    void setCurrentTab(int index);
+
 private slots:
     //=== Tab1：列头设置 ===
     void on_applyBtn_clicked();
