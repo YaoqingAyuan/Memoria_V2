@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(Memoria_N_V2 VERSION 2.0.0 LANGUAGES CXX)
+#V2.0.0版本 优化精简版分支
+#无右键预览功能、翻译空板（仅支持中文）、未适配油管缓存
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
