@@ -1,12 +1,14 @@
 #include "mainwindow.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QLocale>
 #include <QTranslator>
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    a.setWindowIcon(QIcon(":/assets/memoria.png"));
 
     QTranslator translator;
     const QStringList uiLanguages = QLocale::system().uiLanguages();

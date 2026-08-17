@@ -22,6 +22,36 @@ set(PROJECT_SOURCES
         ${TS_FILES}
 )
 
+# Windows 应用图标资源
+if(WIN32)
+    # 将 .ico 复制到构建目录，.rc 中用相对路径 "memoria.ico"，
+    # 避免 windres 预处理器因项目路径含空格（d:\Github Clone\...）而失败
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/memoria.ico
+         DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/app.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+        @ONLY
+    )
+    get_filename_component(_mingw_bin ${CMAKE_CXX_COMPILER} DIRECTORY)
+    find_program(WINDRES_EXECUTABLE windres HINTS ${_mingw_bin})
+    set(MEMORIA_RC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/app_rc.obj)
+    add_custom_command(
+        OUTPUT ${MEMORIA_RC_OBJ}
+        COMMAND ${WINDRES_EXECUTABLE} app.rc app_rc.obj -O coff
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+                ${CMAKE_CURRENT_BINARY_DIR}/memoria.ico
+        COMMENT "Compiling Windows icon resource"
+    )
+    set(APP_ICON_RESOURCE ${MEMORIA_RC_OBJ})
+else()
+    set(APP_ICON_RESOURCE "")
+endif()
+
+# Qt 资源文件（窗口图标等）
+set(APP_QRC_FILES app.qrc)
+
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(Memoria_N_V2
         MANUAL_FINALIZATION
@@ -46,7 +76,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         Adb_Module/AdbTypes.h
         Adb_Module/AdbModule.h Adb_Module/AdbModule.cpp
 
-
+        ${APP_QRC_FILES}
+        ${APP_ICON_RESOURCE}
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET Memoria_N_V2 APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -58,12 +89,16 @@ else()
     if(ANDROID)
         add_library(Memoria_N_V2 SHARED
             ${PROJECT_SOURCES}
+            ${APP_QRC_FILES}
+            ${APP_ICON_RESOURCE}
         )
 # Define properties for Android with Qt 5 after find_package() calls as:
 #    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else()
         add_executable(Memoria_N_V2
             ${PROJECT_SOURCES}
+            ${APP_QRC_FILES}
+            ${APP_ICON_RESOURCE}
         )
     endif()
 
