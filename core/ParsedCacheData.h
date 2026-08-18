@@ -2,12 +2,7 @@
 #define PARSEDCACHEDATA_H
 
 #include <QString>
-#include <QMap>
 //Parsed(解析的)Cache(缓存)Data(数据)
-
-
-//初始容器类型QMap<QString, QString>,读取的entry.json&index.json文件信息进入该容器
-typedef QMap<QString, QString> MetadataContainer;
 
 //行状态枚举：驱动表格显示与导出流程的状态标记
 enum RowStatus {
@@ -104,8 +99,6 @@ public:
     VideoInfo videoInfo;
     StreamInfo videoStream;
     StreamInfo audioStream;
-    MetadataContainer entryJsonData;
-    MetadataContainer indexJsonData;
 };
 
 #endif // PARSEDCACHEDATA_H

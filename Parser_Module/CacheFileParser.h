@@ -7,7 +7,6 @@
 #include <QString>
 #include <QDir>
 #include <QJsonObject>
-#include <QMap>
 #include <QList>
 #include "Core/ParsedCacheData.h"
 
@@ -24,18 +23,14 @@ public:
     bool Cathe_Parse(const QString &folderPath, QList<ParsedCacheData> &outDataList);
     bool findMediaFiles(const QString &dirPath, ParsedCacheData &data);
     qint64 getDirectorySize(const QDir &dir);
-    //解析entry.json文件函数：从容器EntryJsonData读取数据填入VideoInfo结构体
-    bool parseEntryJson(ParsedCacheData &data);
-    //解析index.json文件函数：从容器IndexJsonData读取数据填入StreamInfo结构体
-    bool parseIndexJson(ParsedCacheData &data);
+    //解析entry.json文件函数：从QJsonObject直接读取数据填入VideoInfo结构体
+    bool parseEntryJson(const QJsonObject &obj, VideoInfo &info);
+    //解析index.json文件函数：从QJsonObject直接读取数据填入StreamInfo结构体
+    bool parseIndexJson(const QJsonObject &obj, StreamInfo &videoStream, StreamInfo &audioStream);
 
 private:
-    //递归展平JSON函数(通用辅助函数)
-    void flattenJsonRecursive(const QJsonObject &obj, const QString &prefix, MetadataContainer &container);
-    //将entry.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool EntryflattenJson(const QString &filePath, MetadataContainer &container);
-    //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool indexflattenJson(const QString &filePath, MetadataContainer &container);
+    //读取JSON文件并解析为QJsonObject(替代原展平中间步骤，直接解析)
+    bool loadJsonObject(const QString &filePath, QJsonObject &outObj);
     //解析单个子目录(离线诊断ID下的一个c_xxx或番剧集号目录)
     //subDirPath=子目录路径，cacheRootPath=离线诊断ID根路径(用于cacheRootPath字段)
     bool parseSingleSubDir(const QString &subDirPath, const QString &cacheRootPath, ParsedCacheData &outData);
@@ -43,17 +38,17 @@ private:
 
 #endif // CACHEFILEPARSER_H
 /* 260729 概述：将两结构体的声明重构到ParsedCacheData类中，作为该类成员变量
+ * 【优化】移除EntryJsonData与IndexJsonData中间容器，解析器直接从QJsonObject读取数据填充结构体
+ * 减少内存占用(不再保存完整JSON展平数据)，提升解析速度(省去递归展平步骤)
  * 新问题：如何兼容番剧类型？
  * 依然存在的问题：
  * 1.结构体VideoInfo中的isValid() const函数的潜在Bug【测试了再修也不迟】
  * 2.考虑是否该把"关键数据"判定【判定为不完整不得入"任务队列"】
  *
  * 【已解决】摸清流信息结构体的作用
- * 【已解决】还有一个疑虑:当初将EntryJsonData与IndexJsonData放入私有变量中，就是为了使每个解析器实例都有独立数据容器
- * 将两容器重构到ParsedCacheData类中，解析器只负责解析"文件"然后填充"数据"类实例
+ * 【已解决】解析器只负责解析"文件"然后填充"数据"类实例
  * 后续提供UI(渲染可视化表格)以及"队列类"(排队)-"FFmpeg类"(混流)调用
- * 【已解决】缓存解析函数、两Json展平函数、~~~~解析函数三大模块需整理"工作流"
- * 制作简单的字符画思维导图；然后看看函数内部的运作机理
+ * 【已解决】缓存解析函数、解析函数两大模块工作流已整理(字符画思维导图)
  * 【已解决】想办法让debug\warning\critical三个函数独立出去（毕竟其他模块也得用）
  * 后续看一看该模块内部各函数是什么意思？
  */
