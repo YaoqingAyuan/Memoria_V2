@@ -15,6 +15,7 @@ QT_END_NAMESPACE
 class DataModel;
 class TaskQueue;
 class ExterDevice_Input_Weight;
+class VideoPlayback_Weight;
 
 class MainWindow : public QMainWindow
 {
@@ -70,6 +71,7 @@ private:
     TaskQueue *m_taskQueue;     //导出任务队列(顺序驱动FFmpeg_module)
 
     ExterDevice_Input_Weight *m_exterDeviceInputWindow = nullptr;   //外部设备导入窗口(复用)
+    VideoPlayback_Weight *m_videoPlaybackWindow = nullptr;          //预览播放窗口(复用)
     QList<int> m_exportRowIndices;  //当前导出批次中任务索引→表格行索引的映射
     int m_totalTasks = 0;           //当前导出批次总任务数(驱动总进度条)
 

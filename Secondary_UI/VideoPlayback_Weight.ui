@@ -6,14 +6,81 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>1200</width>
+    <height>700</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>预览 — 双屏播放对比</string>
   </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="handleWidth">
+      <number>3</number>
+     </property>
+     <widget class="VideoPlayerWidget" name="localPlayer"/>
+     <widget class="VideoPlayerWidget" name="onlinePlayer"/>
+     <widget class="WebSearchSidebar" name="sidebar">
+      <property name="minimumSize">
+       <size>
+        <width>200</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>350</width>
+        <height>16777215</height>
+       </size>
+      </property>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="statusBar">
+     <property name="styleSheet">
+      <string notr="true">QLabel { background: #2d2d30; color: #cccccc; padding: 4px 12px; font-size: 12px; }</string>
+     </property>
+     <property name="text">
+      <string>  就绪 — 等加载数据</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>VideoPlayerWidget</class>
+   <extends>QWidget</extends>
+   <header>Secondary_UI/VideoPlayerWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>WebSearchSidebar</class>
+   <extends>QWidget</extends>
+   <header>Secondary_UI/WebSearchSidebar.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

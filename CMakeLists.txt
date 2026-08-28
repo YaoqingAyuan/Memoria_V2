@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
 
 set(TS_FILES Memoria_N_V2_zh_CN.ts)
 
@@ -73,8 +73,14 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
 
         Secondary_UI/ExterDevice_Input_Weight.h Secondary_UI/ExterDevice_Input_Weight.cpp Secondary_UI/ExterDevice_Input_Weight.ui
         Secondary_UI/Setting_Dialog.h Secondary_UI/Setting_Dialog.cpp Secondary_UI/Setting_Dialog.ui
+        Secondary_UI/MetadataViewer_Dialog.h Secondary_UI/MetadataViewer_Dialog.cpp Secondary_UI/MetadataViewer_Dialog.ui
         Adb_Module/AdbTypes.h
         Adb_Module/AdbModule.h Adb_Module/AdbModule.cpp
+
+        Net_Module/BiliSearchResult.h
+        Net_Module/BiliApiWorker.h Net_Module/BiliApiWorker.cpp
+        Secondary_UI/VideoPlayerWidget.h Secondary_UI/VideoPlayerWidget.cpp Secondary_UI/VideoPlayerWidget.ui
+        Secondary_UI/WebSearchSidebar.h Secondary_UI/WebSearchSidebar.cpp Secondary_UI/WebSearchSidebar.ui
 
         ${APP_QRC_FILES}
         ${APP_ICON_RESOURCE}
@@ -105,7 +111,12 @@ else()
     qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
-target_link_libraries(Memoria_N_V2 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(Memoria_N_V2 PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Multimedia
+    Qt${QT_VERSION_MAJOR}::MultimediaWidgets
+    Qt${QT_VERSION_MAJOR}::Network
+)
 
 #将项目根目录及Core子目录加入包含路径，使各子目录中的文件可通过 "Core/xxx.h" 或 "xxx.h" 引用核心头文件
 target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/Core)

@@ -11,6 +11,8 @@
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
 #include "Secondary_UI/ExterDevice_Input_Weight.h"
+#include "Secondary_UI/MetadataViewer_Dialog.h"
+#include "Secondary_UI/VideoPlayback_Weight.h"
 #include <QHeaderView>
 #include <QContextMenuEvent>
 #include <QFileDialog>
@@ -22,6 +24,8 @@
 #include <QAction>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QStandardPaths>
+#include <QDir>
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -62,6 +66,15 @@ MainWindow::MainWindow(QWidget *parent)
     //缓存管理：启动时清理过期缓存（崩溃恢复 + 过期清理）
     auto &cm = CacheManager::instance();
     cm.cleanExpired(cm.expiryDays());
+
+    //清理预览残留临时文件(崩溃恢复)
+    QString previewDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                         + "/preview_cache";
+    QDir dir(previewDir);
+    if (dir.exists()) {
+        dir.removeRecursively();
+        dir.mkpath(previewDir);
+    }
 
     //单个导出任务完成 → 成功则删除对应缓存
     connect(m_taskQueue, &TaskQueue::taskFinished, this, &MainWindow::onTaskFinished);
@@ -130,6 +143,9 @@ void MainWindow::setupTableContextMenu()
                              : QStringLiteral("删除此行");
         QAction *deleteAction = menu.addAction(deleteText);
         QAction *clearAction = menu.addAction(QStringLiteral("清空此行"));
+        menu.addSeparator();
+        QAction *viewMetadataAction = menu.addAction(QStringLiteral("查看原始元数据"));
+        QAction *previewAction = menu.addAction(QStringLiteral("预览"));
 
         QAction *selected = menu.exec(ui->MetadataTable->viewport()->mapToGlobal(pos));
 
@@ -175,6 +191,27 @@ void MainWindow::setupTableContextMenu()
         } else if (selected == clearAction) {
             //重置该行为默认空行
             m_dataModel->setRowData(index.row(), ParsedCacheData());
+        } else if (selected == viewMetadataAction) {
+            //弹出元数据查看对话框
+            const ParsedCacheData &data = m_dataModel->getRowData(index.row());
+            MetadataViewer_Dialog dialog(data, this);
+            dialog.exec();
+        } else if (selected == previewAction) {
+            //弹出预览播放窗口
+            const ParsedCacheData &data = m_dataModel->getRowData(index.row());
+            if (!data.videoInfo.isValid()) {
+                QMessageBox::warning(this, QStringLiteral("提示"),
+                    QStringLiteral("该行数据无效(音视频路径缺失)，无法预览"));
+            } else {
+                if (!m_videoPlaybackWindow) {
+                    m_videoPlaybackWindow = new VideoPlayback_Weight(this);
+                    m_videoPlaybackWindow->setWindowFlag(Qt::Window);
+                }
+                m_videoPlaybackWindow->loadCacheData(data);
+                m_videoPlaybackWindow->show();
+                m_videoPlaybackWindow->raise();
+                m_videoPlaybackWindow->activateWindow();
+            }
         }
     });
 }
@@ -535,6 +572,14 @@ void MainWindow::deleteCacheForRow(int row)
         return;
 
     const ParsedCacheData &data = m_dataModel->getRowData(row);
+
+    //如果预览窗口正在播放该行数据，关闭预览窗口(触发临时文件清理)
+    if (m_videoPlaybackWindow && m_videoPlaybackWindow->isVisible()) {
+        if (m_videoPlaybackWindow->currentAvid() == data.videoInfo.avid) {
+            m_videoPlaybackWindow->close();
+        }
+    }
+
     QString cachePath = data.videoInfo.cacheRootPath;
 
     //仅当路径位于缓存目录内时才删除（本地导入的文件不删）
@@ -726,6 +771,11 @@ void MainWindow::onAbout()
 //窗口关闭事件：根据设置清理缓存
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    //关闭预览窗口(触发临时文件清理)
+    if (m_videoPlaybackWindow) {
+        m_videoPlaybackWindow->close();
+    }
+
     auto &cm = CacheManager::instance();
     if (cm.cleanOnClose()) {
         cm.cleanAll();
