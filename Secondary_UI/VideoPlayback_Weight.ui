@@ -13,7 +13,13 @@
   <property name="windowTitle">
    <string>预览 — 双屏播放对比</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget#VideoPlayback_Weight { background: #1e1e1e; }</string>
+  </property>
   <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
    <property name="leftMargin">
     <number>0</number>
    </property>
@@ -26,33 +32,635 @@
    <property name="bottomMargin">
     <number>0</number>
    </property>
-   <property name="spacing">
-    <number>0</number>
-   </property>
    <item>
-    <widget class="QSplitter" name="splitter">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-     <property name="handleWidth">
-      <number>3</number>
-     </property>
-     <widget class="VideoPlayerWidget" name="localPlayer"/>
-     <widget class="VideoPlayerWidget" name="onlinePlayer"/>
-     <widget class="WebSearchSidebar" name="sidebar">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
+    <widget class="QWidget" name="playersContainer" native="true">
+     <layout class="QHBoxLayout" name="playersLayout">
+      <property name="spacing">
+       <number>2</number>
       </property>
-      <property name="maximumSize">
-       <size>
-        <width>350</width>
-        <height>16777215</height>
-       </size>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QWidget" name="localPlayerGroup" native="true">
+        <layout class="QVBoxLayout" name="localPlayerVLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="localPlayerTitle">
+           <property name="styleSheet">
+            <string notr="true">QLabel { background: #2d2d30; color: #cccccc; padding: 4px 8px; font-size: 12px; }</string>
+           </property>
+           <property name="text">
+            <string>播放屏幕(本地)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QVideoWidget" name="localVideoWidget">
+           <property name="styleSheet">
+            <string notr="true">background: #000000;</string>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>120</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="localControlsContainer" native="true">
+           <property name="styleSheet">
+            <string notr="true">QWidget { background: #2d2d30; }</string>
+           </property>
+           <layout class="QHBoxLayout" name="localControlsLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>6</number>
+            </property>
+            <property name="topMargin">
+             <number>4</number>
+            </property>
+            <property name="rightMargin">
+             <number>6</number>
+            </property>
+            <property name="bottomMargin">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="localRewindBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="localPlayBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>32</width>
+                <height>32</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>32</width>
+                <height>32</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="localForwardBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="localTimeLabel">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>110</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QLabel { color: #aaaaaa; font-size: 11px; }</string>
+              </property>
+              <property name="text">
+               <string>00:00 / 00:00</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSlider" name="localProgressSlider">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QSlider::groove:horizontal { height: 4px; background: #555; border-radius: 2px; }
+QSlider::handle:horizontal { width: 12px; height: 12px; margin: -4px 0; border-radius: 6px; background: #00a1d6; }
+QSlider::sub-page:horizontal { background: #00a1d6; border-radius: 2px; }</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="localVolumeLabel">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSlider" name="localVolumeSlider">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>60</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QSlider::groove:horizontal { height: 4px; background: #555; border-radius: 2px; }
+QSlider::handle:horizontal { width: 10px; height: 10px; margin: -3px 0; border-radius: 5px; background: #ccc; }
+QSlider::sub-page:horizontal { background: #ccc; border-radius: 2px; }</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="onlinePlayerGroup" native="true">
+        <layout class="QVBoxLayout" name="onlinePlayerVLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="onlinePlayerTitle">
+           <property name="styleSheet">
+            <string notr="true">QLabel { background: #2d2d30; color: #cccccc; padding: 4px 8px; font-size: 12px; }</string>
+           </property>
+           <property name="text">
+            <string>播放屏幕(云端)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QVideoWidget" name="onlineVideoWidget">
+           <property name="styleSheet">
+            <string notr="true">background: #000000;</string>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>120</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QWidget" name="onlineControlsContainer" native="true">
+           <property name="styleSheet">
+            <string notr="true">QWidget { background: #2d2d30; }</string>
+           </property>
+           <layout class="QHBoxLayout" name="onlineControlsLayout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <property name="leftMargin">
+             <number>6</number>
+            </property>
+            <property name="topMargin">
+             <number>4</number>
+            </property>
+            <property name="rightMargin">
+             <number>6</number>
+            </property>
+            <property name="bottomMargin">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="onlineRewindBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="onlinePlayBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>32</width>
+                <height>32</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>32</width>
+                <height>32</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="onlineForwardBtn">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>28</width>
+                <height>28</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QPushButton { border: none; }</string>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="onlineTimeLabel">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>110</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QLabel { color: #aaaaaa; font-size: 11px; }</string>
+              </property>
+              <property name="text">
+               <string>00:00 / 00:00</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSlider" name="onlineProgressSlider">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QSlider::groove:horizontal { height: 4px; background: #555; border-radius: 2px; }
+QSlider::handle:horizontal { width: 12px; height: 12px; margin: -4px 0; border-radius: 6px; background: #00a1d6; }
+QSlider::sub-page:horizontal { background: #00a1d6; border-radius: 2px; }</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="onlineVolumeLabel">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSlider" name="onlineVolumeSlider">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>60</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>60</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QSlider::groove:horizontal { height: 4px; background: #555; border-radius: 2px; }
+QSlider::handle:horizontal { width: 10px; height: 10px; margin: -3px 0; border-radius: 5px; background: #ccc; }
+QSlider::sub-page:horizontal { background: #ccc; border-radius: 2px; }</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="searchRowContainer" native="true">
+     <property name="styleSheet">
+      <string notr="true">QWidget { background: #252526; }</string>
+     </property>
+     <layout class="QHBoxLayout" name="searchRowLayout">
+      <property name="spacing">
+       <number>6</number>
+      </property>
+      <property name="leftMargin">
+       <number>8</number>
+      </property>
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="rightMargin">
+       <number>8</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item>
+       <widget class="QLineEdit" name="searchEdit">
+        <property name="minimumSize">
+         <size>
+          <width>200</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QLineEdit { padding: 4px 6px; border: 1px solid #3c3c3c; border-radius: 3px; background: #2d2d30; color: #cccccc; }
+QLineEdit::placeholder { color: #777; }</string>
+        </property>
+        <property name="placeholderText">
+         <string>标题/BV号搜索</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="searchBtn">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>50</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>50</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton { background: #00a1d6; color: white; border: none; border-radius: 3px; padding: 4px; }
+QPushButton:hover { background: #00b4e8; }</string>
+        </property>
+        <property name="text">
+         <string>搜索</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="availabilityLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel { color: #888; font-size: 11px; padding: 2px 8px; }</string>
+        </property>
+        <property name="text">
+         <string>是否下架标识</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="searchRowSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loginBtn">
+        <property name="styleSheet">
+         <string notr="true">QPushButton { text-align: left; padding: 4px 8px; border: none; color: #888; }</string>
+        </property>
+        <property name="text">
+         <string>登录</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="loginStatusLabel">
+        <property name="styleSheet">
+         <string notr="true">QLabel { color: #888; font-size: 11px; }</string>
+        </property>
+        <property name="text">
+         <string>登录后可获取高清流</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="resultList">
+     <property name="styleSheet">
+      <string notr="true">QListWidget { border: none; background: #1e1e1e; color: #cccccc; }
+QListWidget::item { padding: 6px; border-bottom: 1px solid #2d2d30; }
+QListWidget::item:selected { background: #00a1d6; color: white; }</string>
+     </property>
     </widget>
    </item>
    <item>
@@ -61,7 +669,7 @@
       <string notr="true">QLabel { background: #2d2d30; color: #cccccc; padding: 4px 12px; font-size: 12px; }</string>
      </property>
      <property name="text">
-      <string>  就绪 — 等加载数据</string>
+      <string>  就绪 — 等待加载数据</string>
      </property>
     </widget>
    </item>
@@ -69,16 +677,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>VideoPlayerWidget</class>
+   <class>QVideoWidget</class>
    <extends>QWidget</extends>
-   <header>Secondary_UI/VideoPlayerWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>WebSearchSidebar</class>
-   <extends>QWidget</extends>
-   <header>Secondary_UI/WebSearchSidebar.h</header>
-   <container>1</container>
+   <header>QVideoWidget</header>
   </customwidget>
  </customwidgets>
  <resources/>

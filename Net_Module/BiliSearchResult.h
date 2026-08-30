@@ -1,7 +1,7 @@
 #ifndef BILISEARCHRESULT_H
 #define BILISEARCHRESULT_H
 //B站(Bili)搜索结果(SearchResult)数据结构
-//供 BiliApiWorker 发射、WebSearchSidebar 接收展示
+//供 BiliApiWorker 发射、VideoPlayback_Weight 接收展示
 
 #include <QString>
 #include <QList>

@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network WebChannel WebEngineCore WebEngineWidgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network WebChannel WebEngineCore WebEngineWidgets)
 
 set(TS_FILES Memoria_N_V2_zh_CN.ts)
 
@@ -33,18 +33,26 @@ if(WIN32)
         ${CMAKE_CURRENT_BINARY_DIR}/app.rc
         @ONLY
     )
-    get_filename_component(_mingw_bin ${CMAKE_CXX_COMPILER} DIRECTORY)
-    find_program(WINDRES_EXECUTABLE windres HINTS ${_mingw_bin})
-    set(MEMORIA_RC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/app_rc.obj)
-    add_custom_command(
-        OUTPUT ${MEMORIA_RC_OBJ}
-        COMMAND ${WINDRES_EXECUTABLE} app.rc app_rc.obj -O coff
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/app.rc
-                ${CMAKE_CURRENT_BINARY_DIR}/memoria.ico
-        COMMENT "Compiling Windows icon resource"
-    )
-    set(APP_ICON_RESOURCE ${MEMORIA_RC_OBJ})
+    if(MINGW)
+        # MinGW: 使用 windres 编译资源
+        get_filename_component(_mingw_bin ${CMAKE_CXX_COMPILER} DIRECTORY)
+        find_program(WINDRES_EXECUTABLE windres HINTS ${_mingw_bin})
+        set(MEMORIA_RC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/app_rc.obj)
+        add_custom_command(
+            OUTPUT ${MEMORIA_RC_OBJ}
+            COMMAND ${WINDRES_EXECUTABLE} app.rc app_rc.obj -O coff
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+                    ${CMAKE_CURRENT_BINARY_DIR}/memoria.ico
+            COMMENT "Compiling Windows icon resource (MinGW windres)"
+        )
+        set(APP_ICON_RESOURCE ${MEMORIA_RC_OBJ})
+    elseif(MSVC)
+        # MSVC: 直接将 .rc 文件加入源文件，CMake 会自动处理
+        set(APP_ICON_RESOURCE ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
+    else()
+        set(APP_ICON_RESOURCE "")
+    endif()
 else()
     set(APP_ICON_RESOURCE "")
 endif()
@@ -79,8 +87,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
 
         Net_Module/BiliSearchResult.h
         Net_Module/BiliApiWorker.h Net_Module/BiliApiWorker.cpp
-        Secondary_UI/VideoPlayerWidget.h Secondary_UI/VideoPlayerWidget.cpp Secondary_UI/VideoPlayerWidget.ui
-        Secondary_UI/WebSearchSidebar.h Secondary_UI/WebSearchSidebar.cpp Secondary_UI/WebSearchSidebar.ui
 
         ${APP_QRC_FILES}
         ${APP_ICON_RESOURCE}
@@ -116,6 +122,9 @@ target_link_libraries(Memoria_N_V2 PRIVATE
     Qt${QT_VERSION_MAJOR}::Multimedia
     Qt${QT_VERSION_MAJOR}::MultimediaWidgets
     Qt${QT_VERSION_MAJOR}::Network
+    Qt${QT_VERSION_MAJOR}::WebChannel
+    Qt${QT_VERSION_MAJOR}::WebEngineCore
+    Qt${QT_VERSION_MAJOR}::WebEngineWidgets
 )
 
 #将项目根目录及Core子目录加入包含路径，使各子目录中的文件可通过 "Core/xxx.h" 或 "xxx.h" 引用核心头文件
