@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network WebChannel WebEngineCore WebEngineWidgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network WebChannel WebEngineCore WebEngineWidgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Multimedia MultimediaWidgets Network)
 
 set(TS_FILES Memoria_N_V2_zh_CN.ts)
 
@@ -87,6 +87,11 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
 
         Net_Module/BiliSearchResult.h
         Net_Module/BiliApiWorker.h Net_Module/BiliApiWorker.cpp
+        Net_Module/HttpProxyServer.h Net_Module/HttpProxyServer.cpp
+
+        ThirdParty/qrcodegen.hpp ThirdParty/qrcodegen.cpp
+
+        Secondary_UI/ResultCardWidget.h
 
         ${APP_QRC_FILES}
         ${APP_ICON_RESOURCE}
@@ -122,9 +127,6 @@ target_link_libraries(Memoria_N_V2 PRIVATE
     Qt${QT_VERSION_MAJOR}::Multimedia
     Qt${QT_VERSION_MAJOR}::MultimediaWidgets
     Qt${QT_VERSION_MAJOR}::Network
-    Qt${QT_VERSION_MAJOR}::WebChannel
-    Qt${QT_VERSION_MAJOR}::WebEngineCore
-    Qt${QT_VERSION_MAJOR}::WebEngineWidgets
 )
 
 #将项目根目录及Core子目录加入包含路径，使各子目录中的文件可通过 "Core/xxx.h" 或 "xxx.h" 引用核心头文件

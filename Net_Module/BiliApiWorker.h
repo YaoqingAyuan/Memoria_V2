@@ -22,15 +22,22 @@ public:
     void searchByKeyword(const QString &keyword, int page = 1);
     //按BV号精确查询视频信息(用于下架检测)
     void searchByBvid(const QString &bvid);
+    //按AV号精确查询(bvid为空时用avid回退，view API支持aid参数)
+    void searchByAvid(qint64 avid);
 
     //=== 下架检测 ===
     //检查指定BV号视频是否可访问(返回isAvailable + 详情)
     void checkAvailability(const QString &bvid);
 
     //=== 获取播放地址 ===
-    //获取视频流地址(供在线对比播放)
+    //获取MP4格式视频流地址(供未登录即时播放，通过代理注入Referer)
     //quality: 16=360p, 32=480p, 64=720p, 80=1080p
     void fetchPlayUrl(const QString &bvid, int cid, int quality = 32);
+
+    //获取DASH格式视频流地址(供已登录高清播放，FFmpeg混流后播放)
+    //quality: 80=1080P, 112=1080P+, 116=1080P60, 120=4K, 125=HDR, 127=8K
+    //fnval=4048: DASH+HDR+4K+Dolby+8K+AV1，API返回用户可访问的最高画质
+    void fetchPlayUrlDash(const QString &bvid, int cid, int quality = 127);
 
     //=== 二维码登录 ===
     //申请登录二维码(返回二维码图片URL + qrcode_key)
@@ -61,8 +68,10 @@ signals:
     //下架检测结果(bvid, 是否在架, 原因描述)
     void availabilityChecked(const QString &bvid, bool isAvailable, const QString &description);
 
-    //播放地址获取结果(可直接用QMediaPlayer播放的URL)
+    //播放地址获取结果(MP4格式，可直接用QMediaPlayer通过代理播放)
     void playUrlReady(const QString &bvid, const QString &playUrl);
+    //DASH格式播放地址(分离的音视频URL，需FFmpeg混流后播放)
+    void playUrlDashReady(const QString &bvid, const QString &videoUrl, const QString &audioUrl);
     void playUrlFailed(const QString &error);
 
     //二维码登录

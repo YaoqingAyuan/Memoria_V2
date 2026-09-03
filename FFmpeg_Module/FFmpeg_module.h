@@ -51,11 +51,12 @@ struct TranscodeParams {
 
 //混流任务请求结构体：由调用方(UI/任务队列)组装后传入
 struct MuxRequest {
-    QString videoPath;      //video.m4s路径(来自ParsedCacheData.videoInfo.videoFilePath)
-    QString audioPath;      //audio.m4s路径(来自ParsedCacheData.videoInfo.audioFilePath)
+    QString videoPath;      //video.m4s路径或在线视频URL
+    QString audioPath;      //audio.m4s路径或在线音频URL(为空时仅混流视频)
     QString outputPath;     //输出文件路径(UI设置)
     OutputFormat format;    //输出格式
     TranscodeParams params; //转码参数(仅WEBM等转码格式有效)
+    QString httpHeaders;    //HTTP头(在线URL输入时注入Referer/Cookie绕过CDN防盗链)
 };
 
 class FFmpeg_module : public QObject

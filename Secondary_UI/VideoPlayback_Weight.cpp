@@ -1,13 +1,15 @@
 #include "VideoPlayback_Weight.h"
 #include "ui_VideoPlayback_Weight.h"
 #include "Net_Module/BiliApiWorker.h"
+#include "Net_Module/HttpProxyServer.h"
 #include "FFmpeg_Module/FFmpeg_module.h"
 #include "Core/logger.h"
 #include "Core/utils.h"
 #include <QStyle>
 #include <QVideoWidget>
 #include <QSlider>
-#include <QListWidgetItem>
+#include <QHBoxLayout>
+#include <QLayoutItem>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -28,6 +30,9 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QTimer>
+#include <QImage>
+#include "ResultCardWidget.h"
+#include "ThirdParty/qrcodegen.hpp"
 
 VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     : QWidget(parent)
@@ -38,16 +43,25 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     , m_onlineAudio(new QAudioOutput(this))
     , m_apiWorker(new BiliApiWorker(this))
     , m_ffmpeg(new FFmpeg_module(this))
+    , m_proxy(new HttpProxyServer(this))
 {
     ui->setupUi(this);
     setWindowTitle(QStringLiteral("预览 — 双屏播放对比"));
+    //.ui文件中文编码损坏,用QStringLiteral覆盖所有中文文本
+    ui->localPlayerTitle->setText(QStringLiteral("本地预览"));
+    ui->onlinePlayerTitle->setText(QStringLiteral("在线预览"));
+    ui->searchEdit->setPlaceholderText(QStringLiteral("标题/BV号搜索"));
+    ui->searchBtn->setText(QStringLiteral("搜索"));
+    ui->availabilityLabel->setText(QStringLiteral("下架状态："));
+    ui->statusBar->setText(QStringLiteral("  就绪 — 等待加载数据"));
     resize(1200, 700);
 
     //布局stretch因子(不能在.ui中设置，UIC会生成错误的setStretch(QString)调用)
-    //主布局: 播放器=4, 搜索栏=0(固定高), 结果列表=5, 状态栏=0(固定高)
-    ui->mainLayout->setStretch(0, 4);
+    //主布局: 播放器=1(独享剩余空间), 搜索栏=0(固定高), 结果列表=0(固定高), 状态栏=0(固定高)
+    //窗口缩放时只有播放器区域大小变化，搜索结果栏高度不变
+    ui->mainLayout->setStretch(0, 1);
     ui->mainLayout->setStretch(1, 0);
-    ui->mainLayout->setStretch(2, 5);
+    ui->mainLayout->setStretch(2, 0);
     ui->mainLayout->setStretch(3, 0);
     //双播放器等宽
     ui->playersLayout->setStretch(0, 1);
@@ -62,6 +76,16 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     //控制栏内: 进度条(index=4)拉伸, 其余固定
     ui->localControlsLayout->setStretch(4, 1);
     ui->onlineControlsLayout->setStretch(4, 1);
+
+    //搜索结果区: QScrollArea + QHBoxLayout(替代QListWidget IconMode)
+    //固定高度: 卡片110px + 滚动条~20px + 上下边距
+    ui->resultScrollArea->setFixedHeight(145);
+
+    //封面图片下载管理器
+    m_coverNam = new QNetworkAccessManager(this);
+
+    //启动本地HTTP代理(注入Referer/Cookie绕过CDN防盗链)
+    m_proxy->start();
 
     //播放引擎关联到 .ui 中的 QVideoWidget
     m_localPlayer->setVideoOutput(ui->localVideoWidget);
@@ -119,13 +143,14 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     //=== 信号槽：搜索 ===
     connect(ui->searchBtn, &QPushButton::clicked, this, &VideoPlayback_Weight::onSearchClicked);
     connect(ui->searchEdit, &QLineEdit::returnPressed, this, &VideoPlayback_Weight::onSearchClicked);
-    connect(ui->resultList, &QListWidget::itemClicked, this, &VideoPlayback_Weight::onResultItemClicked);
 
     //=== 信号槽：BiliApiWorker ===
     connect(m_apiWorker, &BiliApiWorker::searchResultReady, this, &VideoPlayback_Weight::onSearchResultReady);
     connect(m_apiWorker, &BiliApiWorker::searchFailed, this, &VideoPlayback_Weight::onSearchFailed);
     connect(m_apiWorker, &BiliApiWorker::availabilityChecked, this, &VideoPlayback_Weight::onAvailabilityChecked);
     connect(m_apiWorker, &BiliApiWorker::playUrlReady, this, &VideoPlayback_Weight::onPlayUrlReady);
+    connect(m_apiWorker, &BiliApiWorker::playUrlDashReady, this, &VideoPlayback_Weight::onPlayUrlDashReady);
+    connect(m_apiWorker, &BiliApiWorker::playUrlFailed, this, &VideoPlayback_Weight::onPlayUrlFailed);
     connect(m_apiWorker, &BiliApiWorker::loginStatusChanged, this, &VideoPlayback_Weight::onLoginStatusChanged);
 
     //=== 信号槽：登录 ===
@@ -161,6 +186,30 @@ void VideoPlayback_Weight::initPlayerIcons()
     ui->onlineVolumeLabel->setPixmap(s->standardIcon(QStyle::SP_MediaVolume).pixmap(16, 16));
 }
 
+void VideoPlayback_Weight::fetchCover(const QString &bvid, const QString &url)
+{
+    QNetworkRequest request((QUrl(url)));
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+        QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"));
+    QNetworkReply *reply = m_coverNam->get(request);
+    reply->setProperty("bvid", bvid);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError)
+            return;
+        //按bvid查找卡片(搜索结果clear后旧请求自动失效)
+        QString bvid = reply->property("bvid").toString();
+        for (ResultCardWidget *card : m_resultCards) {
+            if (card->bvid() == bvid) {
+                QPixmap pixmap;
+                pixmap.loadFromData(reply->readAll());
+                card->setCover(pixmap);
+                break;
+            }
+        }
+    });
+}
+
 // ============================================================
 // 加载缓存数据
 // ============================================================
@@ -174,12 +223,36 @@ void VideoPlayback_Weight::loadCacheData(const ParsedCacheData &data)
     startLocalMux();
 
     m_currentBvid = data.videoInfo.bvid;
+    //打开预览时自动搜索，优先级：BV号 > AV号 > 标题
+    //BV号非空 → searchByBvid（同时触发下架检测）
+    //BV号空但有AV号 → searchByAvid（view API支持aid参数）
+    //都没有 → 用标题模糊搜索（清理文件后缀后搜索）
     if (!m_currentBvid.isEmpty()) {
-        ui->statusBar->setText(QStringLiteral("  正在检测下架状态..."));
-        m_apiWorker->checkAvailability(m_currentBvid);
+        ui->statusBar->setText(QStringLiteral("  正在搜索并检测下架状态..."));
         ui->searchEdit->setText(m_currentBvid);
+        m_apiWorker->searchByBvid(m_currentBvid);
+    } else if (data.videoInfo.avid > 0) {
+        ui->statusBar->setText(QStringLiteral("  正在按AV号搜索..."));
+        ui->searchEdit->setText(QStringLiteral("av%1").arg(data.videoInfo.avid));
+        m_apiWorker->searchByAvid(data.videoInfo.avid);
+    } else if (!data.videoInfo.title.isEmpty()) {
+        //清理文件后缀，避免 ".zip" 等干扰搜索
+        QString cleanTitle = data.videoInfo.title;
+        static const QStringList suffixes = {
+            ".zip", ".rar", ".7z", ".mp4", ".mkv", ".mov", ".webm",
+            ".ts", ".flv", ".avi", ".m4a", ".m4v"
+        };
+        for (const auto &suffix : suffixes) {
+            if (cleanTitle.endsWith(suffix, Qt::CaseInsensitive)) {
+                cleanTitle.chop(suffix.length());
+                break;
+            }
+        }
+        ui->statusBar->setText(QStringLiteral("  正在按标题搜索..."));
+        ui->searchEdit->setText(cleanTitle);
+        m_apiWorker->searchByKeyword(cleanTitle);
     } else {
-        ui->statusBar->setText(QStringLiteral("  无BV号，跳过下架检测"));
+        ui->statusBar->setText(QStringLiteral("  无BV号和标题，跳过搜索"));
     }
 }
 
@@ -249,6 +322,14 @@ void VideoPlayback_Weight::onLocalMediaStatusChanged(QMediaPlayer::MediaStatus s
 
 void VideoPlayback_Weight::onOnlinePlayClicked()
 {
+    //若尚未加载有效视频且有搜索结果，自动播放首位视频
+    QMediaPlayer::MediaStatus status = m_onlinePlayer->mediaStatus();
+    if ((status == QMediaPlayer::NoMedia || status == QMediaPlayer::InvalidMedia)
+            && !m_results.isEmpty()) {
+        onOnlineResultSelected(m_results.first());
+        return;
+    }
+
     if (m_onlinePlayer->playbackState() == QMediaPlayer::PlayingState) {
         m_onlinePlayer->pause();
         ui->onlinePlayBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
@@ -314,13 +395,6 @@ void VideoPlayback_Weight::loadLocalFile(const QString &path)
     ui->localProgressSlider->setValue(0);
 }
 
-void VideoPlayback_Weight::loadOnlineFile(const QString &path)
-{
-    m_onlinePlayer->setSource(QUrl::fromUserInput(path));
-    ui->onlineTimeLabel->setText("00:00 / 00:00");
-    ui->onlineProgressSlider->setValue(0);
-}
-
 void VideoPlayback_Weight::stopPlayers()
 {
     m_localPlayer->stop();
@@ -365,14 +439,32 @@ void VideoPlayback_Weight::startLocalMux()
 
 void VideoPlayback_Weight::onLocalMuxFinished(bool success, const QString &message)
 {
-    if (success) {
-        loadLocalFile(m_tempFilePath);
-        Logger::instance()->debug("VideoPlayback", "本地混流完成，播放器已加载");
+    if (m_isOnlineMuxing) {
+        //在线DASH混流完成
+        m_isOnlineMuxing = false;
+        if (success) {
+            m_onlinePlayer->setSource(QUrl::fromLocalFile(m_onlineTempPath));
+            m_onlinePlayer->play();
+            ui->onlinePlayBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+            ui->statusBar->setText(QStringLiteral("  正在播放在线视频(高清)..."));
+            Logger::instance()->debug("VideoPlayback", "在线DASH混流完成，播放器已加载");
+        } else {
+            ui->statusBar->setText(QStringLiteral("  ❌ 在线混流失败: %1").arg(message));
+            Logger::instance()->warning("VideoPlayback",
+                QString("在线DASH混流失败: %1").arg(message));
+            cleanupOnlineTempFile();
+        }
     } else {
-        ui->statusBar->setText(QStringLiteral("  ❌ 本地混流失败: %1").arg(message));
-        Logger::instance()->critical("VideoPlayback",
-            QString("本地混流失败: %1").arg(message));
-        cleanupTempFile();
+        //本地缓存混流完成
+        if (success) {
+            loadLocalFile(m_tempFilePath);
+            Logger::instance()->debug("VideoPlayback", "本地混流完成，播放器已加载");
+        } else {
+            ui->statusBar->setText(QStringLiteral("  ❌ 本地混流失败: %1").arg(message));
+            Logger::instance()->critical("VideoPlayback",
+                QString("本地混流失败: %1").arg(message));
+            cleanupTempFile();
+        }
     }
 }
 
@@ -386,8 +478,8 @@ void VideoPlayback_Weight::onSearchClicked()
     if (keyword.isEmpty())
         return;
 
-    ui->availabilityLabel->setText(QStringLiteral("搜索中..."));
-    ui->resultList->clear();
+    ui->statusBar->setText(QStringLiteral("  正在搜索..."));
+    clearResultCards();
     m_results.clear();
 
     if (keyword.startsWith("BV", Qt::CaseInsensitive)) {
@@ -400,38 +492,47 @@ void VideoPlayback_Weight::onSearchClicked()
 void VideoPlayback_Weight::onSearchResultReady(const QList<BiliSearchResult> &results)
 {
     m_results = results;
-    ui->resultList->clear();
+    clearResultCards();
 
     if (results.isEmpty()) {
-        ui->availabilityLabel->setText(QStringLiteral("无搜索结果"));
+        ui->statusBar->setText(QStringLiteral("  无搜索结果"));
         return;
     }
 
     for (const auto &r : results) {
-        QString display = QStringLiteral("%1\n%2 · %3 播放")
-            .arg(r.title)
-            .arg(r.ownerName)
-            .arg(r.formattedPlayCount());
-        QListWidgetItem *item = new QListWidgetItem(display, ui->resultList);
-        if (!r.isAvailable)
-            item->setForeground(Qt::red);
+        auto *card = new ResultCardWidget(r, ui->resultContainer);
+        m_resultCards.append(card);
+        ui->resultCardsLayout->addWidget(card);
+        if (!r.coverUrl.isEmpty())
+            fetchCover(r.bvid, r.coverUrl);
+        connect(card, &ResultCardWidget::clicked, this, [this, r]() {
+            onOnlineResultSelected(r);
+        });
     }
 
-    ui->availabilityLabel->setText(QStringLiteral("找到 %1 条结果").arg(results.size()));
+    //末尾弹性空间, 让卡片左对齐
+    ui->resultCardsLayout->addStretch();
+    //更新容器最小宽度, 超出视口时自动出现水平滚动条
+    ui->resultContainer->setMinimumWidth(results.size() * 124 + 8);
+
+    ui->statusBar->setText(QStringLiteral("  找到 %1 条结果").arg(results.size()));
 }
 
 void VideoPlayback_Weight::onSearchFailed(const QString &error)
 {
-    ui->availabilityLabel->setText(QStringLiteral("搜索失败: %1").arg(error));
+    ui->statusBar->setText(QStringLiteral("  ❌ 搜索失败: %1").arg(error));
     Logger::instance()->warning("VideoPlayback", QString("搜索失败: %1").arg(error));
 }
 
-void VideoPlayback_Weight::onResultItemClicked(QListWidgetItem *item)
+void VideoPlayback_Weight::clearResultCards()
 {
-    int row = ui->resultList->row(item);
-    if (row >= 0 && row < m_results.size()) {
-        onOnlineResultSelected(m_results[row]);
+    while (ui->resultCardsLayout->count() > 0) {
+        QLayoutItem *item = ui->resultCardsLayout->takeAt(0);
+        if (QWidget *w = item->widget())
+            delete w;
+        delete item;
     }
+    m_resultCards.clear();
 }
 
 // ============================================================
@@ -453,52 +554,92 @@ void VideoPlayback_Weight::onAvailabilityChecked(const QString &bvid, bool isAva
 
 void VideoPlayback_Weight::onOnlineResultSelected(const BiliSearchResult &result)
 {
-    ui->statusBar->setText(QStringLiteral("  正在获取在线播放地址..."));
-
-    QNetworkAccessManager *nam = m_apiWorker->findChild<QNetworkAccessManager*>();
-    if (!nam)
+    if (result.bvid.isEmpty()) {
+        ui->statusBar->setText(QStringLiteral("  ❌ 搜索结果无BV号"));
         return;
+    }
+    if (result.cid <= 0) {
+        ui->statusBar->setText(QStringLiteral("  ❌ 搜索结果无CID"));
+        return;
+    }
 
-    QUrl url("https://api.bilibili.com/x/web-interface/view");
-    QUrlQuery query;
-    query.addQueryItem("bvid", result.bvid);
-    url.setQuery(query);
+    ui->statusBar->setText(QStringLiteral("  正在获取在线播放地址..."));
+    m_currentBvid = result.bvid;
 
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-        QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"));
-    request.setRawHeader("Referer", "https://www.bilibili.com");
-    if (m_apiWorker->isLoggedIn())
-        request.setRawHeader("Cookie", m_apiWorker->cookie().toUtf8());
-
-    QNetworkReply *reply = nam->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, result]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            ui->statusBar->setText(QStringLiteral("  ❌ 获取视频信息失败"));
-            return;
-        }
-
-        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        QJsonObject root = doc.object();
-        QJsonObject data = root.value("data").toObject();
-        qint64 cid = data.value("cid").toVariant().toLongLong();
-
-        if (cid > 0) {
-            m_apiWorker->fetchPlayUrl(result.bvid, static_cast<int>(cid));
-            m_currentBvid = result.bvid;
-        } else {
-            ui->statusBar->setText(QStringLiteral("  ❌ 无法获取视频CID"));
-        }
-    });
+    if (m_apiWorker->isLoggedIn()) {
+        //已登录：DASH格式获取最高画质(1080P/4K)，FFmpeg混流后播放
+        m_apiWorker->fetchPlayUrlDash(result.bvid, static_cast<int>(result.cid));
+    } else {
+        //未登录：MP4格式(480P)，通过代理即时播放
+        m_apiWorker->fetchPlayUrl(result.bvid, static_cast<int>(result.cid), 32);
+    }
 }
 
 void VideoPlayback_Weight::onPlayUrlReady(const QString &bvid, const QString &playUrl)
 {
-    Q_UNUSED(bvid)
-    loadOnlineFile(playUrl);
+    //方案B: 通过本地HTTP代理注入Referer/Cookie头，绕过B站CDN防盗链
+    //方案C(URL查询参数注入)因QUrl百分号编码导致Referer值失效，已弃用
     Logger::instance()->debug("VideoPlayback",
-        QString("在线播放地址已加载: %1").arg(playUrl.left(80)));
+        QString("在线播放地址已获取，通过代理播放: %1").arg(playUrl.left(80)));
+
+    cleanupOnlineTempFile();
+
+    //设置代理的Referer和Cookie
+    m_proxy->setReferer("https://www.bilibili.com");
+    m_proxy->setCookie(QString());
+    if (m_apiWorker->isLoggedIn()) {
+        m_proxy->setCookie(m_apiWorker->cookie());
+    }
+
+    //通过代理URL播放(QMediaPlayer请求代理→代理注入头→转发CDN响应)
+    QUrl proxyUrl = m_proxy->proxyUrl(QUrl(playUrl));
+    m_onlinePlayer->setSource(proxyUrl);
+    m_onlinePlayer->play();
+    ui->onlinePlayBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+    ui->statusBar->setText(QStringLiteral("  正在播放在线视频..."));
+}
+
+void VideoPlayback_Weight::onPlayUrlDashReady(const QString &bvid, const QString &videoUrl, const QString &audioUrl)
+{
+    //已登录高清播放：DASH分离的音视频URL → 本地代理注入头 → FFmpeg混流为临时MP4 → QMediaPlayer播放
+    //通过代理而非FFmpeg -headers：Windows CommandLineToArgvW将\r\n视为空白，导致-headers值截断
+    Logger::instance()->debug("VideoPlayback",
+        QString("DASH播放地址已获取，通过代理混流: %1").arg(videoUrl.left(80)));
+
+    cleanupOnlineTempFile();
+    m_onlineTempPath = generateOnlineTempPath();
+
+    //设置代理的Referer和Cookie(代理注入HTTP头，FFmpeg只需访问代理URL)
+    m_proxy->setReferer("https://www.bilibili.com");
+    m_proxy->setCookie(QString());
+    if (m_apiWorker->isLoggedIn()) {
+        m_proxy->setCookie(m_apiWorker->cookie());
+    }
+
+    //将CDN URL转为代理URL：http://127.0.0.1:port/proxy?url=ENCODED_CDN_URL
+    QString proxyVideoUrl = m_proxy->proxyUrl(QUrl(videoUrl)).toString();
+    QString proxyAudioUrl;
+    if (!audioUrl.isEmpty()) {
+        proxyAudioUrl = m_proxy->proxyUrl(QUrl(audioUrl)).toString();
+    }
+
+    MuxRequest req;
+    req.videoPath = proxyVideoUrl;
+    req.audioPath = proxyAudioUrl;
+    req.outputPath = m_onlineTempPath;
+    req.format = OutputFormat::MP4;
+
+    m_isOnlineMuxing = true;
+    ui->statusBar->setText(QStringLiteral("  正在缓冲在线视频(高清混流)..."));
+    m_ffmpeg->startMux(req);
+
+    Logger::instance()->debug("VideoPlayback",
+        QString("启动在线DASH混流(代理) → %1").arg(m_onlineTempPath));
+}
+void VideoPlayback_Weight::onPlayUrlFailed(const QString &error)
+{
+    ui->statusBar->setText(QStringLiteral("  在线播放失败: %1").arg(error));
+    Logger::instance()->warning("VideoPlayback", QString("在线播放地址获取失败: %1").arg(error));
 }
 
 // ============================================================
@@ -543,30 +684,37 @@ void VideoPlayback_Weight::showLoginDialog(const QString &qrImageUrl)
     m_hintLabel->setStyleSheet("color: #888; font-size: 12px;");
     layout->addWidget(m_hintLabel);
 
-    QCheckBox *autoLoginCheck = new QCheckBox(QStringLiteral("自动登录(以后打开软件时保持登录)"), m_loginDialog);
-    autoLoginCheck->setChecked(true);
-    layout->addWidget(autoLoginCheck);
+    m_autoLoginCheck = new QCheckBox(QStringLiteral("自动登录(以后打开软件时保持登录)"), m_loginDialog);
+    m_autoLoginCheck->setChecked(true);
+    layout->addWidget(m_autoLoginCheck);
 
-    //下载二维码图片
-    QNetworkAccessManager *nam = new QNetworkAccessManager(this);
-    QNetworkRequest request((QUrl(qrImageUrl)));
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-        QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"));
-    QNetworkReply *reply = nam->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, nam]() {
-        reply->deleteLater();
-        nam->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            if (m_hintLabel)
-                m_hintLabel->setText(QStringLiteral("二维码加载失败"));
-            return;
+    //用Nayuki QR库将url字符串本地渲染为二维码(不依赖网络下载图片)
+    try {
+        qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(
+            qrImageUrl.toUtf8().constData(), qrcodegen::QrCode::Ecc::MEDIUM);
+        int qrSize = qr.getSize();
+        int scale = 8;  //每个模块8像素
+        int margin = 4 * scale;  //4模块留白
+        int imgSize = (qrSize + 8) * scale;
+        QImage image(imgSize, imgSize, QImage::Format_RGB32);
+        image.fill(Qt::white);
+        for (int y = 0; y < qrSize; y++) {
+            for (int x = 0; x < qrSize; x++) {
+                if (qr.getModule(x, y)) {
+                    for (int dy = 0; dy < scale; dy++)
+                        for (int dx = 0; dx < scale; dx++)
+                            image.setPixel(margin + x * scale + dx, margin + y * scale + dy, 0xFF000000);
+                }
+            }
         }
-        QPixmap pixmap;
-        pixmap.loadFromData(reply->readAll());
-        if (!pixmap.isNull() && m_qrCodeLabel) {
-            m_qrCodeLabel->setPixmap(pixmap.scaled(220, 220, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        if (m_qrCodeLabel) {
+            m_qrCodeLabel->setPixmap(QPixmap::fromImage(image).scaled(
+                220, 220, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
-    });
+    } catch (const std::exception &e) {
+        if (m_hintLabel)
+            m_hintLabel->setText(QStringLiteral("二维码生成失败"));
+    }
 
     //启动轮询定时器
     m_loginPollTimer = new QTimer(this);
@@ -585,6 +733,7 @@ void VideoPlayback_Weight::showLoginDialog(const QString &qrImageUrl)
     }
     delete m_loginDialog;
     m_loginDialog = nullptr;
+    m_autoLoginCheck = nullptr;
 }
 
 void VideoPlayback_Weight::closeLoginDialog()
@@ -609,6 +758,14 @@ void VideoPlayback_Weight::onLoginStatusChanged(int code, const QString &message
     case 0:  //登录成功
         if (m_loginPollTimer)
             m_loginPollTimer->stop();
+        //读取"自动登录"复选框状态
+        if (m_autoLoginCheck)
+            m_rememberLogin = m_autoLoginCheck->isChecked();
+        //未勾选"自动登录"时，从QSettings删除Cookie(仅当前会话有效)
+        if (!m_rememberLogin) {
+            QSettings settings;
+            settings.remove("bili/cookie");
+        }
         m_loginDialog->accept();
         updateLoginUI();
         Logger::instance()->debug("VideoPlayback", "B站登录成功");
@@ -686,6 +843,19 @@ QString VideoPlayback_Weight::generateTempPath() const
     return QDir(previewDir).filePath(fileName);
 }
 
+QString VideoPlayback_Weight::generateOnlineTempPath() const
+{
+    QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QString previewDir = baseDir + "/preview_cache";
+    QDir().mkpath(previewDir);
+
+    QString fileName = QStringLiteral("online_%1_%2.mp4")
+        .arg(m_currentBvid)
+        .arg(QDateTime::currentDateTime().toSecsSinceEpoch());
+
+    return QDir(previewDir).filePath(fileName);
+}
+
 void VideoPlayback_Weight::cleanupTempFile()
 {
     if (!m_tempFilePath.isEmpty()) {
@@ -700,10 +870,25 @@ void VideoPlayback_Weight::cleanupTempFile()
     }
 }
 
+void VideoPlayback_Weight::cleanupOnlineTempFile()
+{
+    if (!m_onlineTempPath.isEmpty()) {
+        QFile file(m_onlineTempPath);
+        if (file.exists()) {
+            if (file.remove()) {
+                Logger::instance()->debug("VideoPlayback",
+                    QString("已删除在线临时文件: %1").arg(m_onlineTempPath));
+            }
+        }
+        m_onlineTempPath.clear();
+    }
+}
+
 void VideoPlayback_Weight::closeEvent(QCloseEvent *event)
 {
     stopPlayers();
     cleanupTempFile();
+    cleanupOnlineTempFile();
     m_ffmpeg->stopMux();
 
     Logger::instance()->debug("VideoPlayback", "预览窗口已关闭，临时文件已清理");

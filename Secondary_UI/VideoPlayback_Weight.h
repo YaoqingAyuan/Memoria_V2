@@ -14,10 +14,15 @@
 
 class BiliApiWorker;
 class FFmpeg_module;
-class QListWidgetItem;
+class QNetworkAccessManager;
+class QNetworkReply;
+class QFile;
 class QDialog;
 class QLabel;
 class QTimer;
+class QCheckBox;
+class ResultCardWidget;
+class HttpProxyServer;
 
 namespace Ui {
 class VideoPlayback_Weight;
@@ -68,7 +73,6 @@ private slots:
     void onSearchClicked();
     void onSearchResultReady(const QList<BiliSearchResult> &results);
     void onSearchFailed(const QString &error);
-    void onResultItemClicked(QListWidgetItem *item);
 
     //=== 下架检测 ===
     void onAvailabilityChecked(const QString &bvid, bool isAvailable, const QString &description);
@@ -76,7 +80,8 @@ private slots:
     //=== 在线播放 ===
     void onOnlineResultSelected(const BiliSearchResult &result);
     void onPlayUrlReady(const QString &bvid, const QString &playUrl);
-
+    void onPlayUrlDashReady(const QString &bvid, const QString &videoUrl, const QString &audioUrl);
+    void onPlayUrlFailed(const QString &error);
     //=== B站登录 ===
     void onLoginBtnClicked();
     void onLoginStatusChanged(int code, const QString &message, const QString &cookie);
@@ -93,19 +98,24 @@ private:
 
     //API与FFmpeg
     BiliApiWorker *m_apiWorker;
+    HttpProxyServer *m_proxy = nullptr;
     FFmpeg_module *m_ffmpeg;
+    QNetworkAccessManager *m_coverNam = nullptr;
 
     //当前数据
     ParsedCacheData m_currentData;
     QString m_tempFilePath;
+    QString m_onlineTempPath;
     QString m_currentBvid;
 
     //搜索结果缓存(索引对应列表项)
     QList<BiliSearchResult> m_results;
+    QList<ResultCardWidget*> m_resultCards;
 
     //播放器拖拽状态
     bool m_localDragging = false;
     bool m_onlineDragging = false;
+    bool m_isOnlineMuxing = false;  //标记当前FFmpeg混流是本地缓存还是在线DASH
 
     //登录对话框
     QDialog *m_loginDialog = nullptr;
@@ -113,18 +123,23 @@ private:
     QLabel *m_hintLabel = nullptr;
     QString m_qrcodeKey;
     QTimer *m_loginPollTimer = nullptr;
+    QCheckBox *m_autoLoginCheck = nullptr;  //登录对话框'自动登录'复选框
+    bool m_rememberLogin = true;             //是否记住登录状态
 
     //=== 工具方法 ===
     QString formatTime(qint64 ms) const;
     void initPlayerIcons();
+    void fetchCover(const QString &bvid, const QString &url);
+    void clearResultCards();
     void loadLocalFile(const QString &path);
-    void loadOnlineFile(const QString &path);
     void stopPlayers();
     void updateLoginUI();
     void showLoginDialog(const QString &qrImageUrl);
     void closeLoginDialog();
     QString generateTempPath() const;
+    QString generateOnlineTempPath() const;
     void cleanupTempFile();
+    void cleanupOnlineTempFile();
     void startLocalMux();
 };
 

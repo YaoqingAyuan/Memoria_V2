@@ -11,6 +11,7 @@ struct BiliSearchResult {
     QString title;          //视频标题
     qint64 avid = 0;        //AV号
     QString bvid;           //BV号
+    qint64 cid = 0;         //分P的CID(用于获取播放地址)
     QString coverUrl;       //封面链接
     QString ownerName;      //UP主昵称
     qint64 duration = 0;    //时长(秒)

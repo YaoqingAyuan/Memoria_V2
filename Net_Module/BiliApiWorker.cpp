@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QSettings>
+#include <QNetworkCookie>
 #include <QUrlQuery>
 
 BiliApiWorker::BiliApiWorker(QObject *parent)
@@ -94,6 +95,43 @@ void BiliApiWorker::searchByBvid(const QString &bvid)
     });
 }
 
+void BiliApiWorker::searchByAvid(qint64 avid)
+{
+    //bvid为空时用avid查询(view API支持aid参数)
+    QUrl url("https://api.bilibili.com/x/web-interface/view");
+    QUrlQuery query;
+    query.addQueryItem("aid", QString::number(avid));
+    url.setQuery(query);
+
+    QNetworkReply *reply = m_nam->get(createRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, avid]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit searchFailed(reply->errorString());
+            return;
+        }
+
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonObject root = doc.object();
+        int code = root.value("code").toInt();
+
+        if (code != 0) {
+            QString message = root.value("message").toString();
+            //bvid未知，用avid构造标识
+            emit availabilityChecked(QString::number(avid), false, message);
+            return;
+        }
+
+        BiliSearchResult result = parseVideoInfo(data);
+        QList<BiliSearchResult> list;
+        list.append(result);
+        //用API返回的真实bvid发出下架检测信号
+        emit searchResultReady(list);
+        emit availabilityChecked(result.bvid, true, QStringLiteral("视频正常在线"));
+    });
+}
+
 // ========== 下架检测 ==========
 
 void BiliApiWorker::checkAvailability(const QString &bvid)
@@ -120,6 +158,7 @@ void BiliApiWorker::fetchPlayUrl(const QString &bvid, int cid, int quality)
     connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
+            Logger::instance()->warning("BiliApi", QString("播放地址请求失败: %1").arg(reply->errorString()));
             emit playUrlFailed(reply->errorString());
             return;
         }
@@ -128,13 +167,16 @@ void BiliApiWorker::fetchPlayUrl(const QString &bvid, int cid, int quality)
         QJsonObject root = doc.object();
         int code = root.value("code").toInt();
         if (code != 0) {
-            emit playUrlFailed(root.value("message").toString());
+            QString errMsg = root.value("message").toString();
+            Logger::instance()->warning("BiliApi", QString("播放地址API返回错误: code=%1, msg=%2").arg(code).arg(errMsg));
+            emit playUrlFailed(errMsg);
             return;
         }
 
         QJsonObject data = root.value("data").toObject();
         QJsonArray durl = data.value("durl").toArray();
         if (durl.isEmpty()) {
+            Logger::instance()->warning("BiliApi", "播放地址durl为空(fnval=0可能不支持此视频)");
             emit playUrlFailed(QStringLiteral("未获取到播放地址(可能需要登录)"));
             return;
         }
@@ -146,6 +188,108 @@ void BiliApiWorker::fetchPlayUrl(const QString &bvid, int cid, int quality)
 
         Logger::instance()->debug("BiliApi", QString("获取播放地址成功: %1").arg(bvid));
         emit playUrlReady(bvid, playUrl);
+    });
+}
+
+void BiliApiWorker::fetchPlayUrlDash(const QString &bvid, int cid, int quality)
+{
+    QUrl url("https://api.bilibili.com/x/player/playurl");
+    QUrlQuery query;
+    query.addQueryItem("bvid", bvid);
+    query.addQueryItem("cid", QString::number(cid));
+    query.addQueryItem("qn", QString::number(quality));
+    query.addQueryItem("fnval", "4048");  //DASH+HDR+4K+Dolby+8K+AV1
+    query.addQueryItem("fnver", "0");
+    query.addQueryItem("fourk", "1");      //允许4K
+    url.setQuery(query);
+
+    QNetworkReply *reply = m_nam->get(createRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            Logger::instance()->warning("BiliApi", QString("DASH播放地址请求失败: %1").arg(reply->errorString()));
+            emit playUrlFailed(reply->errorString());
+            return;
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        QJsonObject root = doc.object();
+        int code = root.value("code").toInt();
+        if (code != 0) {
+            QString errMsg = root.value("message").toString();
+            Logger::instance()->warning("BiliApi", QString("DASH播放地址API错误: code=%1, msg=%2").arg(code).arg(errMsg));
+            emit playUrlFailed(errMsg);
+            return;
+        }
+
+        QJsonObject data = root.value("data").toObject();
+        QJsonObject dash = data.value("dash").toObject();
+        QJsonArray videoArr = dash.value("video").toArray();
+        QJsonArray audioArr = dash.value("audio").toArray();
+
+        if (videoArr.isEmpty()) {
+            Logger::instance()->warning("BiliApi", "DASH视频流为空");
+            emit playUrlFailed(QStringLiteral("DASH视频流为空"));
+            return;
+        }
+
+        //选择最高画质的H.264视频流(codecid=7)，无H.264则取最高画质任意编码
+        QJsonObject bestVideo;
+        int bestVideoId = -1;
+        QJsonObject bestH264Video;
+        int bestH264Id = -1;
+        for (const QJsonValue &v : videoArr) {
+            QJsonObject obj = v.toObject();
+            int qid = obj.value("id").toInt();
+            int codecid = obj.value("codecid").toInt();
+            if (qid > bestVideoId) {
+                bestVideoId = qid;
+                bestVideo = obj;
+            }
+            if (codecid == 7 && qid > bestH264Id) {
+                bestH264Id = qid;
+                bestH264Video = obj;
+            }
+        }
+        QJsonObject videoObj = !bestH264Video.isEmpty() ? bestH264Video : bestVideo;
+
+        //选择最高码率的音频流
+        QJsonObject bestAudio;
+        int bestAudioBw = -1;
+        for (const QJsonValue &a : audioArr) {
+            QJsonObject obj = a.toObject();
+            int bw = obj.value("bandwidth").toInt();
+            if (bw > bestAudioBw) {
+                bestAudioBw = bw;
+                bestAudio = obj;
+            }
+        }
+
+        QString videoUrl = videoObj.value("baseUrl").toString();
+        if (videoUrl.isEmpty())
+            videoUrl = videoObj.value("base_url").toString();
+        if (videoUrl.startsWith("//"))
+            videoUrl = "https:" + videoUrl;
+
+        QString audioUrl;
+        if (!bestAudio.isEmpty()) {
+            audioUrl = bestAudio.value("baseUrl").toString();
+            if (audioUrl.isEmpty())
+                audioUrl = bestAudio.value("base_url").toString();
+            if (audioUrl.startsWith("//"))
+                audioUrl = "https:" + audioUrl;
+        }
+
+        if (videoUrl.isEmpty()) {
+            emit playUrlFailed(QStringLiteral("无法解析DASH视频URL"));
+            return;
+        }
+
+        int actualQn = data.value("quality").toInt();
+        Logger::instance()->debug("BiliApi",
+            QString("DASH播放地址成功: %1, 实际画质qn=%2, 视频qn=%3")
+                .arg(bvid).arg(actualQn).arg(videoObj.value("id").toInt()));
+        emit playUrlDashReady(bvid, videoUrl, audioUrl);
     });
 }
 
@@ -198,22 +342,19 @@ void BiliApiWorker::pollLoginStatus(const QString &qrcodeKey)
 
         QString newCookie;
         if (code == 0) {
-            //登录成功，从响应头提取Cookie
-            newCookie = reply->rawHeader("set-cookie");
-            //简化处理：提取SESSDATA和bili_jct
-            //完整实现需要解析set-cookie头部
-            if (newCookie.isEmpty()) {
-                //尝试从URL参数获取
-                QString url2 = data.value("url").toString();
-                //URL中包含SESSDATA等cookie信息
-                QUrl cookieUrl(url2);
-                QUrlQuery cookieQuery(cookieUrl.query());
-                QString sessdata = cookieQuery.queryItemValue("SESSDATA");
-                QString biliJct = cookieQuery.queryItemValue("bili_jct");
-                if (!sessdata.isEmpty()) {
-                    newCookie = QStringLiteral("SESSDATA=%1; bili_jct=%2").arg(sessdata, biliJct);
-                }
+            //登录成功，用QNetworkCookie正确解析Set-Cookie头
+            //reply->rawHeader()在Qt6中用\n拼接多个Set-Cookie，含换行符和Path/Domain等属性
+            //直接使用会导致后续请求HTTP头含非法字符
+            QList<QNetworkCookie> cookies = QNetworkCookie::parseCookies(reply->rawHeader("Set-Cookie"));
+            QString sessdata, biliJct;
+            for (const auto &cookie : cookies) {
+                if (cookie.name() == "SESSDATA")
+                    sessdata = QString::fromUtf8(cookie.value());
+                else if (cookie.name() == "bili_jct")
+                    biliJct = QString::fromUtf8(cookie.value());
             }
+            if (!sessdata.isEmpty())
+                newCookie = QStringLiteral("SESSDATA=%1; bili_jct=%2").arg(sessdata, biliJct);
             m_cookie = newCookie;
             saveCookie();
             Logger::instance()->debug("BiliApi", "B站登录成功");
@@ -302,6 +443,7 @@ BiliSearchResult BiliApiWorker::parseVideoInfo(const QByteArray &data)
     r.title = dataObj.value("title").toString();
     r.avid = dataObj.value("aid").toVariant().toLongLong();
     r.bvid = dataObj.value("bvid").toString();
+    r.cid = dataObj.value("cid").toVariant().toLongLong();
     r.coverUrl = dataObj.value("pic").toString();
     if (r.coverUrl.startsWith("//"))
         r.coverUrl = "https:" + r.coverUrl;

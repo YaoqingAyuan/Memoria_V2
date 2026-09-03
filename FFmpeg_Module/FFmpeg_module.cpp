@@ -194,10 +194,29 @@ QStringList FFmpeg_module::buildCommand(const MuxRequest &request) {
 QStringList FFmpeg_module::buildCopyCommand(const MuxRequest &request, const QString &formatExt) {
     QStringList args;
     args << "-y";                            //覆盖输出文件不询问
-    args << "-i" << request.videoPath;       //输入：视频流
-    args << "-i" << request.audioPath;       //输入：音频流
-    args << "-map" << "0:v:0";               //映射第1个输入的视频流
-    args << "-map" << "1:a:0";               //映射第2个输入的音频流
+
+    //在线URL输入(通过本地代理，代理已注入Referer/Cookie，FFmpeg无需再加-header)
+    //Windows的CommandLineToArgvW将\r\n视为空白字符，导致-headers值被截断
+    bool isOnline = request.videoPath.startsWith("http");
+
+    //输入：视频流(本地文件或在线代理URL)
+    if (isOnline) {
+        args << "-reconnect" << "1" << "-reconnect_streamed" << "1" << "-reconnect_delay_max" << "5";
+    }
+    args << "-i" << request.videoPath;
+
+    //输入：音频流(可能为空，仅在线DASH无音频时)
+    if (!request.audioPath.isEmpty()) {
+        if (isOnline) {
+            args << "-reconnect" << "1" << "-reconnect_streamed" << "1" << "-reconnect_delay_max" << "5";
+        }
+        args << "-i" << request.audioPath;
+        args << "-map" << "0:v:0";           //映射第1个输入的视频流
+        args << "-map" << "1:a:0";           //映射第2个输入的音频流
+    } else {
+        args << "-map" << "0:v:0";           //仅视频
+    }
+
     args << "-c" << "copy";                  //复制流，不转码
     //输出路径已含扩展名，formatExt仅用于日志记录
     Q_UNUSED(formatExt)
@@ -231,10 +250,10 @@ void FFmpeg_module::startMux(const MuxRequest &request) {
         return;
     }
 
-    //输入验证：检查路径非空
-    if (request.videoPath.isEmpty() || request.audioPath.isEmpty()) {
-        Logger::instance()->critical("FFmpeg", "❌ 输入路径为空，无法启动混流");
-        emit finished(false, "输入文件路径为空");
+    //输入验证：视频路径必须非空，音频路径允许为空(在线DASH无音频时)
+    if (request.videoPath.isEmpty()) {
+        Logger::instance()->critical("FFmpeg", "❌ 视频路径为空，无法启动混流");
+        emit finished(false, "视频路径为空");
         return;
     }
     if (request.outputPath.isEmpty()) {
