@@ -82,6 +82,7 @@ private slots:
     void onPlayUrlReady(const QString &bvid, const QString &playUrl);
     void onPlayUrlDashReady(const QString &bvid, const QString &videoUrl, const QString &audioUrl);
     void onPlayUrlFailed(const QString &error);
+    void onOnlinePageChanged(int index);   //分P下拉框切换
     //=== B站登录 ===
     void onLoginBtnClicked();
     void onLoginStatusChanged(int code, const QString &message, const QString &cookie);
@@ -107,6 +108,11 @@ private:
     QString m_tempFilePath;
     QString m_onlineTempPath;
     QString m_currentBvid;
+    qint64 m_currentCid = 0;      //当前P的CID(多P视频预览时使用)
+    int m_currentPage = 1;         //当前P号(多P视频预览时使用)
+
+    QList<BiliPageInfo> m_currentPages;  //当前视频的分P列表
+    bool m_isFetchingPlayUrl = false;    //是否正在获取在线播放地址(防止重复请求)
 
     //搜索结果缓存(索引对应列表项)
     QList<BiliSearchResult> m_results;

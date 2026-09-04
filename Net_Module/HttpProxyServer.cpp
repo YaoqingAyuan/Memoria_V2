@@ -3,6 +3,8 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrlQuery>
+#include <QPointer>
+#include <QSharedPointer>
 #include "Core/logger.h"
 
 HttpProxyServer::HttpProxyServer(QObject *parent)
@@ -106,51 +108,62 @@ void HttpProxyServer::onNewConnection()
                 req.setRawHeader("Range", rangeHeader.toUtf8());
 
             QNetworkReply *reply = m_nam->get(req);
-            bool *headerSent = new bool(false);
+            // 使用 QSharedPointer 管理 headerSent，避免 errorOccurred 与 finished 同时触发导致 double-free
+            auto headerSent = QSharedPointer<bool>::create(false);
+            // 使用 QPointer 保护 client，避免 client 断开后 reply 仍在写入导致野指针崩溃
+            QPointer<QTcpSocket> clientPtr(client);
+            // 使用 QPointer 保护 reply，避免 reply 先被销毁后 client 才断开导致野指针崩溃
+            QPointer<QNetworkReply> replyPtr(reply);
+
+            // 客户端断开时中止对应的网络请求，防止 reply 继续回调
+            connect(client, &QTcpSocket::disconnected, this, [replyPtr, client]() {
+                if (replyPtr && replyPtr->isRunning())
+                    replyPtr->abort();
+                client->deleteLater();
+            });
 
             //收到响应数据时转发给客户端
-            connect(reply, &QNetworkReply::readyRead, this, [client, reply, headerSent]() {
+            connect(reply, &QNetworkReply::readyRead, this, [clientPtr, replyPtr, headerSent]() {
+                if (!clientPtr || !replyPtr)
+                    return;
                 if (!*headerSent) {
-                    int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                    int code = replyPtr->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                     QByteArray response;
                     response.append("HTTP/1.1 " + QByteArray::number(code) + " OK\r\n");
 
                     //转发关键响应头
-                    for (const QByteArray &h : reply->rawHeaderList()) {
+                    for (const QByteArray &h : replyPtr->rawHeaderList()) {
                         QByteArray lower = h.toLower();
                         if (lower == "content-type" || lower == "content-length" ||
                             lower == "content-range" || lower == "accept-ranges") {
-                            response.append(h + ": " + reply->rawHeader(h) + "\r\n");
+                            response.append(h + ": " + replyPtr->rawHeader(h) + "\r\n");
                         }
                     }
                     response.append("Connection: close\r\n\r\n");
-                    client->write(response);
+                    clientPtr->write(response);
                     *headerSent = true;
                 }
-                client->write(reply->readAll());
+                clientPtr->write(replyPtr->readAll());
             });
 
-            connect(reply, &QNetworkReply::finished, this, [client, reply, headerSent]() {
-                if (!*headerSent) {
-                    client->write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+            connect(reply, &QNetworkReply::finished, this, [clientPtr, replyPtr, headerSent]() {
+                if (clientPtr) {
+                    if (!*headerSent) {
+                        clientPtr->write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+                    }
+                    clientPtr->disconnectFromHost();
                 }
-                client->disconnectFromHost();
-                reply->deleteLater();
-                delete headerSent;
+                if (replyPtr)
+                    replyPtr->deleteLater();
+                // headerSent 由 QSharedPointer 自动管理，无需手动 delete
             });
 
-            connect(reply, &QNetworkReply::errorOccurred, this, [client, reply, headerSent](QNetworkReply::NetworkError) {
-                if (!*headerSent) {
-                    client->write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+            connect(reply, &QNetworkReply::errorOccurred, this, [clientPtr, replyPtr, headerSent](QNetworkReply::NetworkError) {
+                if (clientPtr && replyPtr && !*headerSent) {
+                    clientPtr->write("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
                     *headerSent = true;
                 }
-                client->disconnectFromHost();
-                reply->deleteLater();
-                delete headerSent;
-            });
-
-            connect(client, &QTcpSocket::disconnected, this, [client]() {
-                client->deleteLater();
+                // 不在这里 deleteLater reply，由 finished 信号统一处理，避免重复 delete
             });
         });
     }

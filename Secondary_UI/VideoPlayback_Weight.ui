@@ -357,6 +357,35 @@ QSlider::sub-page:horizontal { background: #ccc; border-radius: 2px; }</string>
              <number>4</number>
             </property>
             <item>
+             <widget class="QComboBox" name="onlinePageCombo">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>180</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>180</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QComboBox { background: #3c3c3c; color: #cccccc; border: 1px solid #555; border-radius: 3px; padding: 2px 6px; font-size: 11px; }
+QComboBox:hover { border-color: #00a1d6; }
+QComboBox::drop-down { border: none; width: 16px; }
+QComboBox::down-arrow { image: none; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid #888; }
+QComboBox QAbstractItemView { background: #2d2d30; color: #cccccc; border: 1px solid #555; selection-background-color: #00a1d6; padding: 2px; }</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QPushButton" name="onlineRewindBtn">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">

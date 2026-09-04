@@ -454,5 +454,19 @@ BiliSearchResult BiliApiWorker::parseVideoInfo(const QByteArray &data)
     r.playCount = stat.value("view").toVariant().toLongLong();
     r.isAvailable = true;
 
+    //解析分P列表(pages数组)
+    QJsonArray pagesArray = dataObj.value("pages").toArray();
+    for (const QJsonValue &pv : pagesArray) {
+        QJsonObject pageObj = pv.toObject();
+        BiliPageInfo pi;
+        pi.cid = pageObj.value("cid").toVariant().toLongLong();
+        pi.page = pageObj.value("page").toInt();
+        pi.part = pageObj.value("part").toString();
+        pi.duration = pageObj.value("duration").toVariant().toLongLong();
+        pi.width = pageObj.value("width").toInt();
+        pi.height = pageObj.value("height").toInt();
+        r.pages.append(pi);
+    }
+
     return r;
 }

@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QImage>
+#include <QComboBox>
 #include "ResultCardWidget.h"
 #include "ThirdParty/qrcodegen.hpp"
 
@@ -103,6 +104,11 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     ui->onlineVolumeSlider->setValue(70);
 
     initPlayerIcons();
+
+    //分P下拉框默认隐藏，有分P数据时显示(控件已在.ui中定义)
+    ui->onlinePageCombo->setVisible(false);
+    connect(ui->onlinePageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &VideoPlayback_Weight::onOnlinePageChanged);
 
     //登录按钮支持右键菜单
     ui->loginBtn->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -223,6 +229,17 @@ void VideoPlayback_Weight::loadCacheData(const ParsedCacheData &data)
     startLocalMux();
 
     m_currentBvid = data.videoInfo.bvid;
+    m_currentCid = data.videoInfo.page_ep_Data.cid;
+    m_currentPage = data.videoInfo.page_ep_Data.page;
+    if (m_currentPage <= 0)
+        m_currentPage = 1;
+
+    //重置分P下拉框
+    m_currentPages.clear();
+    ui->onlinePageCombo->blockSignals(true);
+    ui->onlinePageCombo->clear();
+    ui->onlinePageCombo->setVisible(false);
+    ui->onlinePageCombo->blockSignals(false);
     //打开预览时自动搜索，优先级：BV号 > AV号 > 标题
     //BV号非空 → searchByBvid（同时触发下架检测）
     //BV号空但有AV号 → searchByAvid（view API支持aid参数）
@@ -322,12 +339,30 @@ void VideoPlayback_Weight::onLocalMediaStatusChanged(QMediaPlayer::MediaStatus s
 
 void VideoPlayback_Weight::onOnlinePlayClicked()
 {
-    //若尚未加载有效视频且有搜索结果，自动播放首位视频
+    //若尚未加载有效视频且有可用的CID，直接获取播放地址
     QMediaPlayer::MediaStatus status = m_onlinePlayer->mediaStatus();
-    if ((status == QMediaPlayer::NoMedia || status == QMediaPlayer::InvalidMedia)
-            && !m_results.isEmpty()) {
-        onOnlineResultSelected(m_results.first());
-        return;
+    if ((status == QMediaPlayer::NoMedia || status == QMediaPlayer::InvalidMedia)) {
+        //防止重复请求
+        if (m_isFetchingPlayUrl || m_isOnlineMuxing) {
+            ui->statusBar->setText(QStringLiteral("  正在缓冲中，请稍候..."));
+            return;
+        }
+        //优先使用当前选中的分P CID
+        if (m_currentCid > 0 && !m_currentBvid.isEmpty()) {
+            m_isFetchingPlayUrl = true;
+            if (m_apiWorker->isLoggedIn()) {
+                m_apiWorker->fetchPlayUrlDash(m_currentBvid, static_cast<int>(m_currentCid));
+            } else {
+                m_apiWorker->fetchPlayUrl(m_currentBvid, static_cast<int>(m_currentCid), 32);
+            }
+            ui->statusBar->setText(QStringLiteral("  正在获取在线播放地址..."));
+            return;
+        }
+        //回退：有搜索结果时自动播放首位视频
+        if (!m_results.isEmpty()) {
+            onOnlineResultSelected(m_results.first());
+            return;
+        }
     }
 
     if (m_onlinePlayer->playbackState() == QMediaPlayer::PlayingState) {
@@ -496,6 +531,12 @@ void VideoPlayback_Weight::onSearchResultReady(const QList<BiliSearchResult> &re
 
     if (results.isEmpty()) {
         ui->statusBar->setText(QStringLiteral("  无搜索结果"));
+        //清空分P下拉框
+        ui->onlinePageCombo->blockSignals(true);
+        ui->onlinePageCombo->clear();
+        ui->onlinePageCombo->setVisible(false);
+        ui->onlinePageCombo->blockSignals(false);
+        m_currentPages.clear();
         return;
     }
 
@@ -516,6 +557,53 @@ void VideoPlayback_Weight::onSearchResultReady(const QList<BiliSearchResult> &re
     ui->resultContainer->setMinimumWidth(results.size() * 124 + 8);
 
     ui->statusBar->setText(QStringLiteral("  找到 %1 条结果").arg(results.size()));
+
+    //如果第一条结果有分P列表(view接口返回)，填充分P下拉框
+    const BiliSearchResult &first = results.first();
+    if (!first.pages.isEmpty()) {
+        m_currentPages = first.pages;
+        ui->onlinePageCombo->blockSignals(true);
+        ui->onlinePageCombo->clear();
+        for (const BiliPageInfo &pi : first.pages) {
+            QString label = QStringLiteral("P%1 · %2").arg(pi.page).arg(pi.part);
+            ui->onlinePageCombo->addItem(label, pi.cid);
+        }
+        //自动匹配当前缓存对应的分P
+        int matchIndex = -1;
+        if (m_currentCid > 0) {
+            //优先按CID匹配
+            for (int i = 0; i < first.pages.size(); ++i) {
+                if (first.pages.at(i).cid == m_currentCid) {
+                    matchIndex = i;
+                    break;
+                }
+            }
+        }
+        if (matchIndex < 0 && m_currentPage > 0) {
+            //CID未匹配则按P号匹配
+            for (int i = 0; i < first.pages.size(); ++i) {
+                if (first.pages.at(i).page == m_currentPage) {
+                    matchIndex = i;
+                    break;
+                }
+            }
+        }
+        if (matchIndex >= 0) {
+            ui->onlinePageCombo->setCurrentIndex(matchIndex);
+            m_currentCid = first.pages.at(matchIndex).cid;
+            m_currentPage = first.pages.at(matchIndex).page;
+        } else {
+            ui->onlinePageCombo->setCurrentIndex(0);
+            m_currentCid = first.pages.first().cid;
+            m_currentPage = first.pages.first().page;
+        }
+        ui->onlinePageCombo->setVisible(true);
+        ui->onlinePageCombo->blockSignals(false);
+
+        Logger::instance()->debug("VideoPlayback",
+            QString("分P列表已加载: 共%1P, 当前选中P%2 (CID=%3)")
+                .arg(first.pages.size()).arg(m_currentPage).arg(m_currentCid));
+    }
 }
 
 void VideoPlayback_Weight::onSearchFailed(const QString &error)
@@ -558,20 +646,52 @@ void VideoPlayback_Weight::onOnlineResultSelected(const BiliSearchResult &result
         ui->statusBar->setText(QStringLiteral("  ❌ 搜索结果无BV号"));
         return;
     }
-    if (result.cid <= 0) {
-        ui->statusBar->setText(QStringLiteral("  ❌ 搜索结果无CID"));
-        return;
-    }
 
     ui->statusBar->setText(QStringLiteral("  正在获取在线播放地址..."));
     m_currentBvid = result.bvid;
 
+    //如果搜索结果有分P列表，更新分P下拉框
+    if (!result.pages.isEmpty()) {
+        m_currentPages = result.pages;
+        ui->onlinePageCombo->blockSignals(true);
+        ui->onlinePageCombo->clear();
+        for (const BiliPageInfo &pi : result.pages) {
+            QString label = QStringLiteral("P%1 · %2").arg(pi.page).arg(pi.part);
+            ui->onlinePageCombo->addItem(label, pi.cid);
+        }
+        //选中第一P
+        ui->onlinePageCombo->setCurrentIndex(0);
+        m_currentCid = result.pages.first().cid;
+        m_currentPage = result.pages.first().page;
+        ui->onlinePageCombo->setVisible(true);
+        ui->onlinePageCombo->blockSignals(false);
+
+        Logger::instance()->debug("VideoPlayback",
+            QString("选中搜索结果，分P列表已更新: 共%1P").arg(result.pages.size()));
+    } else {
+        //无分P列表(关键词搜索结果)，使用结果的cid
+        m_currentCid = result.cid;
+        m_currentPage = 1;
+        m_currentPages.clear();
+        ui->onlinePageCombo->blockSignals(true);
+        ui->onlinePageCombo->clear();
+        ui->onlinePageCombo->setVisible(false);
+        ui->onlinePageCombo->blockSignals(false);
+    }
+
+    if (m_currentCid <= 0) {
+        ui->statusBar->setText(QStringLiteral("  ❌ 搜索结果无CID"));
+        return;
+    }
+
+    m_isFetchingPlayUrl = true;
+
     if (m_apiWorker->isLoggedIn()) {
         //已登录：DASH格式获取最高画质(1080P/4K)，FFmpeg混流后播放
-        m_apiWorker->fetchPlayUrlDash(result.bvid, static_cast<int>(result.cid));
+        m_apiWorker->fetchPlayUrlDash(m_currentBvid, static_cast<int>(m_currentCid));
     } else {
         //未登录：MP4格式(480P)，通过代理即时播放
-        m_apiWorker->fetchPlayUrl(result.bvid, static_cast<int>(result.cid), 32);
+        m_apiWorker->fetchPlayUrl(m_currentBvid, static_cast<int>(m_currentCid), 32);
     }
 }
 
@@ -579,6 +699,8 @@ void VideoPlayback_Weight::onPlayUrlReady(const QString &bvid, const QString &pl
 {
     //方案B: 通过本地HTTP代理注入Referer/Cookie头，绕过B站CDN防盗链
     //方案C(URL查询参数注入)因QUrl百分号编码导致Referer值失效，已弃用
+    Q_UNUSED(bvid);
+    m_isFetchingPlayUrl = false;
     Logger::instance()->debug("VideoPlayback",
         QString("在线播放地址已获取，通过代理播放: %1").arg(playUrl.left(80)));
 
@@ -603,6 +725,8 @@ void VideoPlayback_Weight::onPlayUrlDashReady(const QString &bvid, const QString
 {
     //已登录高清播放：DASH分离的音视频URL → 本地代理注入头 → FFmpeg混流为临时MP4 → QMediaPlayer播放
     //通过代理而非FFmpeg -headers：Windows CommandLineToArgvW将\r\n视为空白，导致-headers值截断
+    Q_UNUSED(bvid);
+    m_isFetchingPlayUrl = false;
     Logger::instance()->debug("VideoPlayback",
         QString("DASH播放地址已获取，通过代理混流: %1").arg(videoUrl.left(80)));
 
@@ -638,8 +762,54 @@ void VideoPlayback_Weight::onPlayUrlDashReady(const QString &bvid, const QString
 }
 void VideoPlayback_Weight::onPlayUrlFailed(const QString &error)
 {
+    m_isFetchingPlayUrl = false;
     ui->statusBar->setText(QStringLiteral("  在线播放失败: %1").arg(error));
     Logger::instance()->warning("VideoPlayback", QString("在线播放地址获取失败: %1").arg(error));
+}
+
+// ============================================================
+// 分P切换
+// ============================================================
+
+void VideoPlayback_Weight::onOnlinePageChanged(int index)
+{
+    if (index < 0 || index >= m_currentPages.size())
+        return;
+
+    const BiliPageInfo &page = m_currentPages.at(index);
+    m_currentCid = page.cid;
+    m_currentPage = page.page;
+
+    Logger::instance()->debug("VideoPlayback",
+        QString("切换到分P: P%1, CID=%2, 标题=%3")
+            .arg(page.page).arg(page.cid).arg(page.part));
+
+    //停止当前在线播放，重新获取新P的播放地址
+    m_onlinePlayer->stop();
+    m_onlinePlayer->setSource(QUrl());
+    //停止可能正在运行的在线混流
+    if (m_isOnlineMuxing) {
+        m_ffmpeg->stopMux();
+        m_isOnlineMuxing = false;
+    }
+    cleanupOnlineTempFile();
+    ui->onlineTimeLabel->setText("00:00 / 00:00");
+    ui->onlineProgressSlider->setValue(0);
+    ui->onlinePlayBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+
+    if (m_currentBvid.isEmpty() || m_currentCid <= 0) {
+        ui->statusBar->setText(QStringLiteral("  ❌ 无法获取该P的播放地址"));
+        return;
+    }
+
+    ui->statusBar->setText(QStringLiteral("  正在获取P%1播放地址...").arg(page.page));
+    m_isFetchingPlayUrl = true;
+
+    if (m_apiWorker->isLoggedIn()) {
+        m_apiWorker->fetchPlayUrlDash(m_currentBvid, static_cast<int>(m_currentCid));
+    } else {
+        m_apiWorker->fetchPlayUrl(m_currentBvid, static_cast<int>(m_currentCid), 32);
+    }
 }
 
 // ============================================================
