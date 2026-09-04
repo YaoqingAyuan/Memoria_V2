@@ -7,10 +7,10 @@
 #include <QSharedPointer>
 #include "core/logger.h"
 
-HttpProxyServer::HttpProxyServer(QObject *parent)
+HttpProxyServer::HttpProxyServer(QNetworkAccessManager *nam, QObject *parent)
     : QObject(parent)
     , m_server(new QTcpServer(this))
-    , m_nam(new QNetworkAccessManager(this))
+    , m_nam(nam)
 {
 }
 

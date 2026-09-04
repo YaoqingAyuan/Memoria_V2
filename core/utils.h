@@ -41,13 +41,16 @@ inline QString sanitizeFileName(const QString &name, const QString &fallback = Q
     QString safe = name;
 
     //1. 移除控制字符(\x00-\x1F)
-    safe.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1F]")));
+    static const QRegularExpression ctrlCharRegex(QStringLiteral("[\\x00-\\x1F]"));
+    safe.remove(ctrlCharRegex);
 
     //2. 替换Windows文件名非法字符: \ / : * ? " < > |
-    safe.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|]")), QStringLiteral("_"));
+    static const QRegularExpression illegalCharRegex(QStringLiteral("[\\\\/:*?\"<>|]"));
+    safe.replace(illegalCharRegex, QStringLiteral("_"));
 
     //3. 去除末尾空格和点号(Windows不允许文件名以空格或点号结尾)
-    safe.replace(QRegularExpression(QStringLiteral("[ .]+$")), QString());
+    static const QRegularExpression trailingDotSpaceRegex(QStringLiteral("[ .]+$"));
+    safe.replace(trailingDotSpaceRegex, QString());
 
     //4. 处理Windows保留设备名(CON/PRN/AUX/NUL/COM1-9/LPT1-9)，追加下划线避免冲突
     static const QRegularExpression reservedName(

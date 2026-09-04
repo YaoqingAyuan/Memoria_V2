@@ -87,6 +87,9 @@ private slots:
 private:
     Ui::VideoPlayback_Weight *ui;
 
+    //共享网络管理器(BiliApiWorker、HttpProxyServer、封面下载共用)
+    QNetworkAccessManager *m_nam = nullptr;
+
     //播放引擎
     QMediaPlayer *m_localPlayer;
     QAudioOutput *m_localAudio;
@@ -97,7 +100,6 @@ private:
     BiliApiWorker *m_apiWorker;
     HttpProxyServer *m_proxy = nullptr;
     FFmpeg_module *m_ffmpeg;
-    QNetworkAccessManager *m_coverNam = nullptr;
     LoginManager *m_loginManager;
 
     //当前数据

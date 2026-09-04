@@ -31,13 +31,14 @@
 VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::VideoPlayback_Weight)
+    , m_nam(new QNetworkAccessManager(this))
     , m_localPlayer(new QMediaPlayer(this))
     , m_localAudio(new QAudioOutput(this))
     , m_onlinePlayer(new QMediaPlayer(this))
     , m_onlineAudio(new QAudioOutput(this))
-    , m_apiWorker(new BiliApiWorker(this))
+    , m_apiWorker(new BiliApiWorker(m_nam, this))
     , m_ffmpeg(new FFmpeg_module(this))
-    , m_proxy(new HttpProxyServer(this))
+    , m_proxy(new HttpProxyServer(m_nam, this))
     , m_loginManager(new LoginManager(m_apiWorker, this))
 {
     ui->setupUi(this);
@@ -75,9 +76,6 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
     //搜索结果区: QScrollArea + QHBoxLayout(替代QListWidget IconMode)
     //固定高度: 卡片110px + 滚动条~20px + 上下边距
     ui->resultScrollArea->setFixedHeight(145);
-
-    //封面图片下载管理器
-    m_coverNam = new QNetworkAccessManager(this);
 
     //启动本地HTTP代理(注入Referer/Cookie绕过CDN防盗链)
     m_proxy->start();
@@ -191,7 +189,7 @@ void VideoPlayback_Weight::fetchCover(const QString &bvid, const QString &url)
     QNetworkRequest request((QUrl(url)));
     request.setHeader(QNetworkRequest::UserAgentHeader,
         QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"));
-    QNetworkReply *reply = m_coverNam->get(request);
+    QNetworkReply *reply = m_nam->get(request);
     reply->setProperty("bvid", bvid);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();

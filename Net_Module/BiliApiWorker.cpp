@@ -8,9 +8,9 @@
 #include <QNetworkCookie>
 #include <QUrlQuery>
 
-BiliApiWorker::BiliApiWorker(QObject *parent)
+BiliApiWorker::BiliApiWorker(QNetworkAccessManager *nam, QObject *parent)
     : QObject(parent)
-    , m_nam(new QNetworkAccessManager(this))
+    , m_nam(nam)
 {
     loadCookie();
     Logger::instance()->debug("BiliApi", QString("BiliApiWorker 已创建, 登录状态: %1")

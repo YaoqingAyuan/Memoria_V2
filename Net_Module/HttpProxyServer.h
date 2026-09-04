@@ -11,7 +11,7 @@ class HttpProxyServer : public QObject
 {
     Q_OBJECT
 public:
-    explicit HttpProxyServer(QObject *parent = nullptr);
+    explicit HttpProxyServer(QNetworkAccessManager *nam, QObject *parent = nullptr);
 
     bool start();  //在127.0.0.1上监听，端口自动分配
     quint16 port() const { return m_port; }

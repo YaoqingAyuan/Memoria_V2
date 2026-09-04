@@ -14,7 +14,7 @@ class BiliApiWorker : public QObject
 {
     Q_OBJECT
 public:
-    explicit BiliApiWorker(QObject *parent = nullptr);
+    explicit BiliApiWorker(QNetworkAccessManager *nam, QObject *parent = nullptr);
     ~BiliApiWorker();
 
     //=== 搜索 ===
