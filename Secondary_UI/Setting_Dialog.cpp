@@ -3,6 +3,8 @@
 #include "../core/DataModel.h"
 #include "../core/CacheManager.h"
 #include <QMessageBox>
+#include <QtConcurrent>
+#include <QFutureWatcher>
 
 Setting_Dialog::Setting_Dialog(DataModel *model, QWidget *parent)
     : QDialog(parent)
@@ -128,12 +130,21 @@ void Setting_Dialog::loadCacheSettings()
     ui->label_expiryHint->setEnabled(!cleanOnClose);
 }
 
-//刷新缓存大小显示
+//刷新缓存大小显示(异步计算，避免UI卡顿)
 void Setting_Dialog::refreshCacheSize()
 {
-    qint64 size = CacheManager::instance().cacheSize();
-    ui->label_cacheSize->setText(
-        QStringLiteral("当前缓存: %1").arg(CacheManager::formatSize(size)));
+    ui->label_cacheSize->setText(QStringLiteral("当前缓存: 计算中..."));
+
+    auto *watcher = new QFutureWatcher<qint64>(this);
+    connect(watcher, &QFutureWatcher<qint64>::finished, this, [this, watcher]() {
+        qint64 size = watcher->result();
+        ui->label_cacheSize->setText(
+            QStringLiteral("当前缓存: %1").arg(CacheManager::formatSize(size)));
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run([]() {
+        return CacheManager::instance().cacheSize();
+    }));
 }
 
 //关闭时清理CheckBox状态变化

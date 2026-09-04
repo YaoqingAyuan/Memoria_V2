@@ -19,6 +19,13 @@ BiliApiWorker::BiliApiWorker(QNetworkAccessManager *nam, QObject *parent)
 
 BiliApiWorker::~BiliApiWorker()
 {
+    //abort所有未完成的网络请求(共享NAM不会随BiliApiWorker析构而销毁)
+    for (QNetworkReply *reply : m_pendingReplies) {
+        if (reply->isRunning())
+            reply->abort();
+        reply->deleteLater();
+    }
+    m_pendingReplies.clear();
     Logger::instance()->debug("BiliApi", "BiliApiWorker 已销毁");
 }
 
@@ -35,6 +42,14 @@ QNetworkRequest BiliApiWorker::createRequest(const QUrl &url)
     return request;
 }
 
+void BiliApiWorker::trackReply(QNetworkReply *reply)
+{
+    m_pendingReplies.insert(reply);
+    connect(reply, &QObject::destroyed, this, [this](QObject *obj) {
+        m_pendingReplies.remove(static_cast<QNetworkReply*>(obj));
+    });
+}
+
 // ========== 搜索 ==========
 
 void BiliApiWorker::searchByKeyword(const QString &keyword, int page)
@@ -48,6 +63,7 @@ void BiliApiWorker::searchByKeyword(const QString &keyword, int page)
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
+    trackReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -68,6 +84,7 @@ void BiliApiWorker::searchById(const QString &id, bool isBvid)
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
+    trackReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, id]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -132,6 +149,7 @@ void BiliApiWorker::fetchPlayUrlInternal(const QString &bvid, int cid, int quali
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
+    trackReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, bvid, dash]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -147,6 +165,12 @@ void BiliApiWorker::fetchPlayUrlInternal(const QString &bvid, int cid, int quali
             QString errMsg = root.value("message").toString();
             Logger::instance()->warning("BiliApi", QString("播放地址API返回错误: code=%1, msg=%2").arg(code).arg(errMsg));
             emit playUrlFailed(errMsg);
+            return;
+        }
+
+        if (!root.contains("data")) {
+            Logger::instance()->warning("BiliApi", "播放地址API响应缺少data字段");
+            emit playUrlFailed(QStringLiteral("API响应格式异常"));
             return;
         }
 
@@ -248,6 +272,7 @@ void BiliApiWorker::requestLoginQrCode()
     QUrl url("https://passport.bilibili.com/x/passport-login/web/qrcode/generate");
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
+    trackReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -258,7 +283,16 @@ void BiliApiWorker::requestLoginQrCode()
 
         QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
         QJsonObject root = doc.object();
+        if (!root.contains("data")) {
+            Logger::instance()->warning("BiliApi", "二维码API响应缺少data字段");
+            return;
+        }
         QJsonObject data = root.value("data").toObject();
+
+        if (!data.contains("url") || !data.contains("qrcode_key")) {
+            Logger::instance()->warning("BiliApi", "二维码API响应缺少url或qrcode_key字段");
+            return;
+        }
 
         QString qrUrl = data.value("url").toString();
         QString qrcodeKey = data.value("qrcode_key").toString();
@@ -276,6 +310,7 @@ void BiliApiWorker::pollLoginStatus(const QString &qrcodeKey)
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
+    trackReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
@@ -284,6 +319,10 @@ void BiliApiWorker::pollLoginStatus(const QString &qrcodeKey)
 
         QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
         QJsonObject root = doc.object();
+        if (!root.contains("data")) {
+            Logger::instance()->warning("BiliApi", "登录轮询API响应缺少data字段");
+            return;
+        }
         QJsonObject data = root.value("data").toObject();
         int code = data.value("code").toInt();
         QString message = data.value("message").toString();
@@ -348,10 +387,20 @@ QList<BiliSearchResult> BiliApiWorker::parseSearchResults(const QByteArray &data
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject root = doc.object();
 
+    if (!root.contains("code")) {
+        Logger::instance()->warning("BiliApi", "搜索API响应缺少code字段");
+        return results;
+    }
+
     int code = root.value("code").toInt();
     if (code != 0) {
         Logger::instance()->warning("BiliApi",
             QString("搜索失败: %1").arg(root.value("message").toString()));
+        return results;
+    }
+
+    if (!root.contains("data")) {
+        Logger::instance()->warning("BiliApi", "搜索API响应缺少data字段");
         return results;
     }
 
@@ -386,7 +435,18 @@ BiliSearchResult BiliApiWorker::parseVideoInfo(const QByteArray &data)
     BiliSearchResult r;
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject root = doc.object();
+
+    if (!root.contains("data")) {
+        Logger::instance()->warning("BiliApi", "视频信息API响应缺少data字段");
+        return r;
+    }
+
     QJsonObject dataObj = root.value("data").toObject();
+
+    if (!dataObj.contains("bvid") || !dataObj.contains("title")) {
+        Logger::instance()->warning("BiliApi", "视频信息API响应缺少bvid或title字段");
+        return r;
+    }
 
     r.title = dataObj.value("title").toString();
     r.avid = dataObj.value("aid").toVariant().toLongLong();

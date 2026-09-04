@@ -5,8 +5,11 @@
 #include "Adb_Module/AdbModule.h"
 #include "core/ParsedCacheData.h"
 #include "core/CacheManager.h"
+#include "core/ToolLocator.h"
 #include "core/logger.h"
 #include "core/utils.h"
+#include <QtConcurrent>
+#include <QFutureWatcher>
 
 #include <QStandardItemModel>
 #include <QInputDialog>
@@ -59,14 +62,24 @@ ExterDevice_Input_Weight::ExterDevice_Input_Weight(QWidget *parent)
     ui->setupUi(this);
     initUI();
 
-    //ADB自检
-    QString adbPath = m_adb->selfCheck();
-    updateAdbStatus(!adbPath.isEmpty(),
-                    adbPath.isEmpty() ? QStringLiteral("ADB: 未找到") : QStringLiteral("ADB: 就绪"));
-
-    //自检通过则自动刷新设备列表
-    if (!adbPath.isEmpty()) {
-        onRefreshDevices();
+    //异步ADB自检(不阻塞窗口显示)
+    updateAdbStatus(false, QStringLiteral("⏳ ADB: 检测中..."));
+    {
+        auto *watcher = new QFutureWatcher<QString>(this);
+        connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]() {
+            QString adbPath = watcher->result();
+            m_adb->setAdbPath(adbPath);
+            updateAdbStatus(!adbPath.isEmpty(),
+                            adbPath.isEmpty() ? QStringLiteral("ADB: 未找到")
+                                              : QStringLiteral("ADB: 就绪"));
+            if (!adbPath.isEmpty()) {
+                onRefreshDevices();
+            }
+            watcher->deleteLater();
+        });
+        watcher->setFuture(QtConcurrent::run([]() {
+            return ToolLocator::locate("adb", "Adb_tools/bin/adb.exe", "ADB");
+        }));
     }
 }
 

@@ -4,6 +4,9 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QList>
+#include <QtConcurrent>
+#include <QFutureWatcher>
+#include <QProgressDialog>
 #include "core/ParsedCacheData.h"
 
 QT_BEGIN_NAMESPACE
@@ -83,6 +86,9 @@ private:
     void setupMenuBar();
     //删除指定行对应的ADB缓存（若该行数据来源于ADB导入）
     void deleteCacheForRow(int row);
+    //异步导入：标题为空时在线程中计算文件哈希，完成后写入指定行
+    void asyncImportData(const QString &videoPath, const QString &audioPath,
+                         const QString &title, int targetRow);
 };
 
 #endif // MAINWINDOW_H

@@ -120,13 +120,8 @@ void AdbModule::stop()
         return;
     }
 
-    Logger::instance()->debug("ADB", ">>> 尝试停止ADB进程");
-    m_process->terminate();
-    if (!m_process->waitForFinished(3000)) {
-        Logger::instance()->warning("ADB", "优雅退出超时，强制终止");
-        m_process->kill();
-        m_process->waitForFinished(2000);
-    }
+    Logger::instance()->debug("ADB", ">>> 强制停止ADB进程");
+    m_process->kill();
 }
 
 // ========== 私有：执行adb命令 ==========

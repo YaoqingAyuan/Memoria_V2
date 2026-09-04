@@ -115,7 +115,8 @@ private:
 
     //搜索结果缓存(索引对应列表项)
     QList<BiliSearchResult> m_results;
-    QList<ResultCardWidget*> m_resultCards;
+    QList<ResultCardWidget*> m_resultCards;   //当前可见卡片
+    QList<ResultCardWidget*> m_cardPool;      //已创建卡片池(复用，避免反复new/delete)
 
     //播放器拖拽状态
     bool m_localDragging = false;

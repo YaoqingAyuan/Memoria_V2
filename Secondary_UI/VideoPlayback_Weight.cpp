@@ -163,6 +163,7 @@ VideoPlayback_Weight::VideoPlayback_Weight(QWidget *parent)
 VideoPlayback_Weight::~VideoPlayback_Weight()
 {
     cleanupTempFile();
+    qDeleteAll(m_cardPool);
     delete ui;
 }
 
@@ -532,15 +533,28 @@ void VideoPlayback_Weight::onSearchResultReady(const QList<BiliSearchResult> &re
         return;
     }
 
-    for (const auto &r : results) {
-        auto *card = new ResultCardWidget(r, ui->resultContainer);
-        m_resultCards.append(card);
+    //复用m_cardPool中的卡片，不足时新建
+    for (int i = 0; i < results.size(); ++i) {
+        const auto &r = results[i];
+        ResultCardWidget *card;
+        if (i < m_cardPool.size()) {
+            //复用已有卡片
+            card = m_cardPool[i];
+            card->updateData(r);
+        } else {
+            //池中不够，新建并加入池
+            card = new ResultCardWidget(r, ui->resultContainer);
+            m_cardPool.append(card);
+            connect(card, &ResultCardWidget::clicked, this, [this, card]() {
+                onOnlineResultSelected(card->data());
+            });
+        }
+        card->show();
         ui->resultCardsLayout->addWidget(card);
-        if (!r.coverUrl.isEmpty())
+        m_resultCards.append(card);
+        //封面：bvid不变时复用已有封面，仅新bvid才下载
+        if (!r.coverUrl.isEmpty() && !card->hasCover())
             fetchCover(r.bvid, r.coverUrl);
-        connect(card, &ResultCardWidget::clicked, this, [this, r]() {
-            onOnlineResultSelected(r);
-        });
     }
 
     //末尾弹性空间, 让卡片左对齐
@@ -606,12 +620,13 @@ void VideoPlayback_Weight::onSearchFailed(const QString &error)
 
 void VideoPlayback_Weight::clearResultCards()
 {
+    //从布局移除所有项(不删除widget，移入m_cardPool供下次复用)
     while (ui->resultCardsLayout->count() > 0) {
         QLayoutItem *item = ui->resultCardsLayout->takeAt(0);
-        if (QWidget *w = item->widget())
-            delete w;
-        delete item;
+        delete item;  //仅删除LayoutItem，widget保留在m_cardPool中
     }
+    for (ResultCardWidget *card : m_cardPool)
+        card->hide();
     m_resultCards.clear();
 }
 

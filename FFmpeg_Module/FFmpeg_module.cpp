@@ -266,15 +266,8 @@ void FFmpeg_module::stopMux() {
         return;
     }
 
-    Logger::instance()->debug("FFmpeg", ">>> 尝试优雅停止FFmpeg进程");
-    m_process->terminate();  //尝试优雅退出
-
-    //等待3秒，若未退出则强制终止
-    if (!m_process->waitForFinished(3000)) {
-        Logger::instance()->warning("FFmpeg", "优雅退出超时，强制终止进程");
-        m_process->kill();
-        m_process->waitForFinished(2000);
-    }
+    Logger::instance()->debug("FFmpeg", ">>> 强制停止FFmpeg进程");
+    m_process->kill();
 
     Logger::instance()->debug("FFmpeg", "✅ 进程已停止");
 }

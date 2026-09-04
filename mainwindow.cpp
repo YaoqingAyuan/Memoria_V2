@@ -3,10 +3,12 @@
 #include "core/DataModel.h"
 #include "core/ParsedCacheData.h"
 #include "core/CacheManager.h"
+#include "core/ToolLocator.h"
 #include "TaskQueue/TaskQueue.h"
 #include "FFmpeg_Module/FFmpeg_module.h"
 #include "Parser_Module/CacheFileParser.h"
 #include "core/utils.h"
+#include "core/logger.h"
 #include "Secondary_UI/Setting_Dialog.h"
 #include "Secondary_UI/Independ_Import_Dialog.h"
 #include "Secondary_UI/Output_Setting_Dlog.h"
@@ -36,16 +38,26 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    //启动时自检FFmpeg环境，根据结果更新状态标签(委托 TaskQueue → FFmpeg_module::selfCheck)
-    //自检同步执行(内部 where ffmpeg 通常 <200ms)，结果路径同时预填到FFmpeg_module供后续混流复用
-    const QString ffmpegPath = m_taskQueue->selfCheckFFmpeg();
-    if (ffmpegPath.isEmpty()) {
-        ui->FFmpegEnvLabel->setText(QStringLiteral("❌ 未找到 FFmpeg 环境"));
-        ui->FFmpegEnvLabel->setToolTip(QStringLiteral(
-            "未检测到 FFmpeg。请将 ffmpeg.exe 加入系统 PATH，或放入软件目录下的 FFmpeg_tools/bin/"));
-    } else {
-        ui->FFmpegEnvLabel->setText(QStringLiteral("✅ FFmpeg: %1").arg(ffmpegPath));
-        ui->FFmpegEnvLabel->setToolTip(QStringLiteral("FFmpeg 路径: %1").arg(ffmpegPath));
+    //启动时异步自检FFmpeg环境(不阻塞窗口显示)
+    ui->FFmpegEnvLabel->setText(QStringLiteral("⏳ FFmpeg: 检测中..."));
+    {
+        auto *watcher = new QFutureWatcher<QString>(this);
+        connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]() {
+            const QString ffmpegPath = watcher->result();
+            m_taskQueue->setFFmpegPath(ffmpegPath);
+            if (ffmpegPath.isEmpty()) {
+                ui->FFmpegEnvLabel->setText(QStringLiteral("❌ 未找到 FFmpeg 环境"));
+                ui->FFmpegEnvLabel->setToolTip(QStringLiteral(
+                    "未检测到 FFmpeg。请将 ffmpeg.exe 加入系统 PATH，或放入软件目录下的 FFmpeg_tools/bin/"));
+            } else {
+                ui->FFmpegEnvLabel->setText(QStringLiteral("✅ FFmpeg: %1").arg(ffmpegPath));
+                ui->FFmpegEnvLabel->setToolTip(QStringLiteral("FFmpeg 路径: %1").arg(ffmpegPath));
+            }
+            watcher->deleteLater();
+        });
+        watcher->setFuture(QtConcurrent::run([]() {
+            return ToolLocator::locate("ffmpeg", "FFmpeg_tools/bin/ffmpeg.exe", "FFmpeg");
+        }));
     }
 
     //加载列可见性配置
@@ -153,22 +165,8 @@ void MainWindow::setupTableContextMenu()
             //弹出独立导入对话框(操作右键所在行)
             Independ_Import_Dialog dialog(this);
             if (dialog.exec() == QDialog::Accepted) {
-                //从对话框获取路径数据，填充到右键所在行
-                ParsedCacheData data;
-                data.videoInfo.audioFilePath = dialog.audioPath();
-                data.videoInfo.videoFilePath = dialog.videoPath();
-                //标题为空时使用默认标题(视频哈希前8位_音频哈希前8位_日期)
-                QString title = dialog.title();
-                if (title.isEmpty()) {
-                    QString videoHash = fileHashPrefix(data.videoInfo.videoFilePath, 8);
-                    QString audioHash = fileHashPrefix(data.videoInfo.audioFilePath, 8);
-                    title = QStringLiteral("%1_%2_%3")
-                        .arg(videoHash)
-                        .arg(audioHash)
-                        .arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
-                }
-                data.videoInfo.title = title;
-                m_dataModel->setRowData(index.row(), data);
+                asyncImportData(dialog.videoPath(), dialog.audioPath(),
+                                dialog.title(), index.row());
             }
         } else if (selected == deleteAction) {
             if (selectedCount > 1 && rowSelected) {
@@ -452,22 +450,8 @@ void MainWindow::on_IndepImport_Btn_clicked()
 {
     Independ_Import_Dialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        //构建数据行并追加到表格末尾
-        ParsedCacheData data;
-        data.videoInfo.audioFilePath = dialog.audioPath();
-        data.videoInfo.videoFilePath = dialog.videoPath();
-        //标题为空时使用默认标题(视频哈希前8位_音频哈希前8位_日期)
-        QString title = dialog.title();
-        if (title.isEmpty()) {
-            QString videoHash = fileHashPrefix(data.videoInfo.videoFilePath, 8);
-            QString audioHash = fileHashPrefix(data.videoInfo.audioFilePath, 8);
-            title = QStringLiteral("%1_%2_%3")
-                .arg(videoHash)
-                .arg(audioHash)
-                .arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
-        }
-        data.videoInfo.title = title;
-        m_dataModel->setRowData(-1, data);  //-1=追加到末尾
+        asyncImportData(dialog.videoPath(), dialog.audioPath(),
+                        dialog.title(), -1);  //-1=追加到末尾
     }
 }
 
@@ -519,31 +503,52 @@ void MainWindow::on_LocalCache_Btn_clicked()
     if (selectedDirs.isEmpty())
         return;
 
-    //逐个解析选中的文件夹，收集所有ParsedCacheData
-    CacheFileParser parser;
-    int totalImported = 0;
-    int failCount = 0;
+    //异步解析选中的文件夹(避免大量JSON解析阻塞UI)
+    QProgressDialog *progress = new QProgressDialog(
+        QStringLiteral("正在解析缓存文件..."), QString(), 0, 0, this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setMinimumDuration(0);
+    progress->show();
 
-    for (const QString &dir : selectedDirs) {
-        QList<ParsedCacheData> dataList;
-        if (parser.Cathe_Parse(dir, dataList)) {
-            for (const ParsedCacheData &data : dataList) {
-                m_dataModel->setRowData(-1, data);  //-1=追加到末尾
-                totalImported++;
+    auto *watcher = new QFutureWatcher<QPair<QList<ParsedCacheData>, int>>(this);
+    connect(watcher, &QFutureWatcher<QPair<QList<ParsedCacheData>, int>>::finished, this,
+            [this, watcher, progress]() {
+                progress->close();
+                progress->deleteLater();
+
+                auto result = watcher->result();
+                int totalImported = result.first.size();
+                int failCount = result.second;
+
+                for (const ParsedCacheData &data : result.first) {
+                    m_dataModel->setRowData(-1, data);  //-1=追加到末尾
+                }
+
+                if (totalImported == 0) {
+                    QMessageBox::warning(this, QStringLiteral("导入失败"),
+                        QStringLiteral("未能从选中的文件夹中解析出有效数据"));
+                } else if (failCount > 0) {
+                    QMessageBox::information(this, QStringLiteral("导入完成"),
+                        QStringLiteral("成功导入 %1 条数据，%2 个文件夹解析失败")
+                            .arg(totalImported).arg(failCount));
+                }
+
+                watcher->deleteLater();
+            });
+    watcher->setFuture(QtConcurrent::run([selectedDirs]() {
+        CacheFileParser parser;
+        QList<ParsedCacheData> allData;
+        int failCount = 0;
+        for (const QString &dir : selectedDirs) {
+            QList<ParsedCacheData> dataList;
+            if (parser.Cathe_Parse(dir, dataList)) {
+                allData.append(dataList);
+            } else {
+                failCount++;
             }
-        } else {
-            failCount++;
         }
-    }
-
-    //提示导入结果
-    if (totalImported == 0) {
-        QMessageBox::warning(this, QStringLiteral("导入失败"),
-            QStringLiteral("未能从选中的文件夹中解析出有效数据"));
-    } else if (failCount > 0) {
-        QMessageBox::information(this, QStringLiteral("导入完成"),
-            QStringLiteral("成功导入 %1 条数据，%2 个文件夹解析失败").arg(totalImported).arg(failCount));
-    }
+        return qMakePair(allData, failCount);
+    }));
 }
 
 //外部设备导入确认：接收ExterDevice_Input_Weight传来的解析数据，逐条写入DataModel
@@ -590,6 +595,51 @@ void MainWindow::deleteCacheForRow(int row)
             cm.deleteFolder(folderName);
         }
     }
+}
+
+//异步导入：标题为空时在线程中计算文件哈希，完成后写入指定行
+void MainWindow::asyncImportData(const QString &videoPath, const QString &audioPath,
+                                 const QString &title, int targetRow)
+{
+    if (!title.isEmpty()) {
+        //标题已提供，无需哈希，直接写入
+        ParsedCacheData data;
+        data.videoInfo.videoFilePath = videoPath;
+        data.videoInfo.audioFilePath = audioPath;
+        data.videoInfo.title = title;
+        m_dataModel->setRowData(targetRow, data);
+        return;
+    }
+
+    //标题为空，在线程中计算文件哈希前缀
+    QProgressDialog *progress = new QProgressDialog(
+        QStringLiteral("正在计算文件哈希..."), QString(), 0, 0, this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setMinimumDuration(0);
+    progress->show();
+
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this,
+            [this, watcher, progress, videoPath, audioPath, targetRow]() {
+                progress->close();
+                progress->deleteLater();
+
+                ParsedCacheData data;
+                data.videoInfo.videoFilePath = videoPath;
+                data.videoInfo.audioFilePath = audioPath;
+                data.videoInfo.title = watcher->result();
+                m_dataModel->setRowData(targetRow, data);
+
+                watcher->deleteLater();
+            });
+    watcher->setFuture(QtConcurrent::run([videoPath, audioPath]() {
+        QString videoHash = fileHashPrefix(videoPath, 8);
+        QString audioHash = fileHashPrefix(audioPath, 8);
+        return QStringLiteral("%1_%2_%3")
+            .arg(videoHash)
+            .arg(audioHash)
+            .arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
+    }));
 }
 
 //单个导出任务完成：成功则删除对应缓存（混流已产出，缓存不再需要）
@@ -693,23 +743,32 @@ void MainWindow::onResetColumnWidth()
 
 //=== 菜单栏-工具 ===
 
-//FFmpeg环境检测：重新自检并更新状态标签
+//FFmpeg环境检测：异步自检并更新状态标签
 void MainWindow::onFFmpegCheck()
 {
-    const QString ffmpegPath = m_taskQueue->selfCheckFFmpeg();
-    if (ffmpegPath.isEmpty()) {
-        ui->FFmpegEnvLabel->setText(QStringLiteral("❌ 未找到 FFmpeg 环境"));
-        ui->FFmpegEnvLabel->setToolTip(QStringLiteral(
-            "未检测到 FFmpeg。请将 ffmpeg.exe 加入系统 PATH，或放入软件目录下的 FFmpeg_tools/bin/"));
-        QMessageBox::warning(this, QStringLiteral("FFmpeg 环境检测"),
-            QStringLiteral("未检测到 FFmpeg 环境。\n请将 ffmpeg.exe 加入系统 PATH，"
-                           "或放入软件目录下的 FFmpeg_tools/bin/"));
-    } else {
-        ui->FFmpegEnvLabel->setText(QStringLiteral("✅ FFmpeg: %1").arg(ffmpegPath));
-        ui->FFmpegEnvLabel->setToolTip(QStringLiteral("FFmpeg 路径: %1").arg(ffmpegPath));
-        QMessageBox::information(this, QStringLiteral("FFmpeg 环境检测"),
-            QStringLiteral("已检测到 FFmpeg：\n%1").arg(ffmpegPath));
-    }
+    ui->FFmpegEnvLabel->setText(QStringLiteral("⏳ FFmpeg: 检测中..."));
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]() {
+        const QString ffmpegPath = watcher->result();
+        m_taskQueue->setFFmpegPath(ffmpegPath);
+        if (ffmpegPath.isEmpty()) {
+            ui->FFmpegEnvLabel->setText(QStringLiteral("❌ 未找到 FFmpeg 环境"));
+            ui->FFmpegEnvLabel->setToolTip(QStringLiteral(
+                "未检测到 FFmpeg。请将 ffmpeg.exe 加入系统 PATH，或放入软件目录下的 FFmpeg_tools/bin/"));
+            QMessageBox::warning(this, QStringLiteral("FFmpeg 环境检测"),
+                QStringLiteral("未检测到 FFmpeg 环境。\n请将 ffmpeg.exe 加入系统 PATH，"
+                               "或放入软件目录下的 FFmpeg_tools/bin/"));
+        } else {
+            ui->FFmpegEnvLabel->setText(QStringLiteral("✅ FFmpeg: %1").arg(ffmpegPath));
+            ui->FFmpegEnvLabel->setToolTip(QStringLiteral("FFmpeg 路径: %1").arg(ffmpegPath));
+            QMessageBox::information(this, QStringLiteral("FFmpeg 环境检测"),
+                QStringLiteral("已检测到 FFmpeg：\n%1").arg(ffmpegPath));
+        }
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run([]() {
+        return ToolLocator::locate("ffmpeg", "FFmpeg_tools/bin/ffmpeg.exe", "FFmpeg");
+    }));
 }
 
 //清理过期缓存

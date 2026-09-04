@@ -70,6 +70,7 @@ public:
     //检测FFmpeg环境：优先使用用户设备已存在的环境，否则调用软件自带环境
     //返回ffmpeg.exe的完整路径
     QString selfCheck();
+    void setFFmpegPath(const QString &path) { m_ffmpegPath = path; }
 
     // ========== 解析传入地址 + 构建指令 ==========
     //根据MuxRequest构建完整的FFmpeg命令行参数列表

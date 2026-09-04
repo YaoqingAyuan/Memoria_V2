@@ -215,6 +215,20 @@ bool CacheFileParser::flattenJsonFile(const QString &filePath, const QString &fi
 
 //EntryJson解析(parse)函数:从容器EntryJsonData读取→填入VideoInfo结构体
 bool CacheFileParser::parseEntryJson(ParsedCacheData &data) {
+    //键校验：检查关键键是否存在，记录缺失项
+    static const QStringList requiredKeys = {
+        "avid", "bvid", "title", "owner_name", "cover"
+    };
+    QStringList missingKeys;
+    for (const QString &key : requiredKeys) {
+        if (!data.entryJsonData.contains(key))
+            missingKeys.append(key);
+    }
+    if (!missingKeys.isEmpty()) {
+        Logger::instance()->warning("Parser",
+            QString("⚠️ entry.json 缺失键: %1").arg(missingKeys.join(", ")));
+    }
+
     data.videoInfo.avid = data.entryJsonData["avid"].toLongLong();
     data.videoInfo.bvid = data.entryJsonData["bvid"];
     data.videoInfo.title = data.entryJsonData["title"];
@@ -271,6 +285,21 @@ bool CacheFileParser::parseEntryJson(ParsedCacheData &data) {
 
 //IndexJson解析(parse)函数:从容器IndexJsonData读取→填入StreamInfo结构体
 bool CacheFileParser::parseIndexJson(ParsedCacheData &data) {
+    //键校验：检查关键流信息键是否存在
+    static const QStringList requiredKeys = {
+        "video[0].id", "video[0].codecid", "video[0].width", "video[0].height",
+        "audio[0].id", "audio[0].codecid"
+    };
+    QStringList missingKeys;
+    for (const QString &key : requiredKeys) {
+        if (!data.indexJsonData.contains(key))
+            missingKeys.append(key);
+    }
+    if (!missingKeys.isEmpty()) {
+        Logger::instance()->warning("Parser",
+            QString("⚠️ index.json 缺失键: %1").arg(missingKeys.join(", ")));
+    }
+
     data.videoStream.id = data.indexJsonData["video[0].id"].toInt();
     data.videoStream.bandwidth = data.indexJsonData["video[0].bandwidth"].toInt();
     data.videoStream.codecid = data.indexJsonData["video[0].codecid"].toInt();

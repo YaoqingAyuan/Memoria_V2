@@ -28,6 +28,7 @@ public:
     //检测ADB环境：优先用户环境的adb，回退到随包 ADB_tools/bin/adb.exe
     //返回adb.exe完整路径，失败返回空字符串
     QString selfCheck();
+    void setAdbPath(const QString &path) { m_adbPath = path; }
     QString getAdbPath() const { return m_adbPath; }
 
     // ========== 设备管理 ==========

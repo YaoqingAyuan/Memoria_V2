@@ -57,8 +57,28 @@ public:
             (scaled.width() - 120) / 2,
             (scaled.height() - 68) / 2,
             120, 68));
+        m_hasCover = true;
     }
 
+    //复用卡片时更新数据(bvid不变则保留已下载的封面)
+    void updateData(const BiliSearchResult &result)
+    {
+        bool bvidChanged = (m_bvid != result.bvid);
+        m_data = result;
+        m_bvid = result.bvid;
+        m_titleLabel->setText(result.title);
+        if (!result.isAvailable) {
+            m_titleLabel->setStyleSheet("color: #ff5555; font-size: 12px; padding: 2px 4px;");
+        } else {
+            m_titleLabel->setStyleSheet("color: #e0e0e0; font-size: 12px; padding: 2px 4px;");
+        }
+        if (bvidChanged) {
+            m_coverLabel->clear();
+            m_hasCover = false;
+        }
+    }
+
+    bool hasCover() const { return m_hasCover; }
     QString bvid() const { return m_bvid; }
     const BiliSearchResult &data() const { return m_data; }
 
@@ -78,6 +98,7 @@ private:
     QString m_bvid;
     QLabel *m_coverLabel;
     QLabel *m_titleLabel;
+    bool m_hasCover = false;
 };
 
 #endif // RESULTCARDWIDGET_H

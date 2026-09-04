@@ -8,6 +8,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QList>
+#include <QSet>
 #include "Net_Module/BiliSearchResult.h"
 
 class BiliApiWorker : public QObject
@@ -81,9 +82,12 @@ signals:
 private:
     QNetworkAccessManager *m_nam;
     QString m_cookie;    //Cookie字符串(SESSDATA=xxx; bili_jct=xxx)
+    QSet<QNetworkReply*> m_pendingReplies;  //跟踪未完成的网络请求，析构时abort
 
     //创建带通用Header的请求
     QNetworkRequest createRequest(const QUrl &url);
+    //跟踪网络请求(reply销毁时自动从集合移除)
+    void trackReply(QNetworkReply *reply);
     //解析搜索API返回的JSON
     QList<BiliSearchResult> parseSearchResults(const QByteArray &data);
     //解析视频信息API返回的JSON(view接口)
