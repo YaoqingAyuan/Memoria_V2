@@ -9,7 +9,7 @@
 #include <QMediaPlayer>
 #include <QAudioOutput>
 #include <QProcess>
-#include "Core/ParsedCacheData.h"
+#include "core/ParsedCacheData.h"
 #include "Net_Module/BiliSearchResult.h"
 
 class BiliApiWorker;
@@ -17,12 +17,9 @@ class FFmpeg_module;
 class QNetworkAccessManager;
 class QNetworkReply;
 class QFile;
-class QDialog;
-class QLabel;
-class QTimer;
-class QCheckBox;
 class ResultCardWidget;
 class HttpProxyServer;
+class LoginManager;
 
 namespace Ui {
 class VideoPlayback_Weight;
@@ -85,7 +82,6 @@ private slots:
     void onOnlinePageChanged(int index);   //分P下拉框切换
     //=== B站登录 ===
     void onLoginBtnClicked();
-    void onLoginStatusChanged(int code, const QString &message, const QString &cookie);
     void onShowLoginContextMenu(const QPoint &pos);
 
 private:
@@ -102,6 +98,7 @@ private:
     HttpProxyServer *m_proxy = nullptr;
     FFmpeg_module *m_ffmpeg;
     QNetworkAccessManager *m_coverNam = nullptr;
+    LoginManager *m_loginManager;
 
     //当前数据
     ParsedCacheData m_currentData;
@@ -123,15 +120,6 @@ private:
     bool m_onlineDragging = false;
     bool m_isOnlineMuxing = false;  //标记当前FFmpeg混流是本地缓存还是在线DASH
 
-    //登录对话框
-    QDialog *m_loginDialog = nullptr;
-    QLabel *m_qrCodeLabel = nullptr;
-    QLabel *m_hintLabel = nullptr;
-    QString m_qrcodeKey;
-    QTimer *m_loginPollTimer = nullptr;
-    QCheckBox *m_autoLoginCheck = nullptr;  //登录对话框'自动登录'复选框
-    bool m_rememberLogin = true;             //是否记住登录状态
-
     //=== 工具方法 ===
     QString formatTime(qint64 ms) const;
     void initPlayerIcons();
@@ -140,8 +128,6 @@ private:
     void loadLocalFile(const QString &path);
     void stopPlayers();
     void updateLoginUI();
-    void showLoginDialog(const QString &qrImageUrl);
-    void closeLoginDialog();
     QString generateTempPath() const;
     QString generateOnlineTempPath() const;
     void cleanupTempFile();

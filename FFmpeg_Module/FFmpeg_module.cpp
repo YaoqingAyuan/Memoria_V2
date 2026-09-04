@@ -1,5 +1,6 @@
 #include "FFmpeg_module.h"
-#include "Core/logger.h"
+#include "core/logger.h"
+#include "core/ToolLocator.h"
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QDir>
@@ -107,59 +108,7 @@ FFmpeg_module::~FFmpeg_module() {
 
 //检测FFmpeg环境：优先使用用户设备已存在的环境，否则调用软件自带环境
 QString FFmpeg_module::selfCheck() {
-    Logger::instance()->debug("FFmpeg", ">>> 开始自检验证：检测FFmpeg环境");
-
-    //策略1：检测系统PATH环境变量中是否有ffmpeg
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    QString pathEnv = env.value("PATH");
-    Logger::instance()->debug("FFmpeg", QString("系统PATH长度: %1 字符").arg(pathEnv.length()));
-
-    //尝试用"where ffmpeg"(Windows)查找用户环境
-    QProcess probe;
-    probe.start("where", QStringList() << "ffmpeg");
-    bool found = probe.waitForFinished(3000);
-    if (found && probe.exitCode() == 0) {
-        QString result = QString::fromLocal8Bit(probe.readAllStandardOutput()).trimmed();
-        if (!result.isEmpty() && !result.contains("INFO: Could not find files")) {
-            m_ffmpegPath = result.split('\n').first().trimmed();
-            Logger::instance()->debug("FFmpeg", QString("✅ 检测到用户环境FFmpeg: %1").arg(m_ffmpegPath));
-            return m_ffmpegPath;
-        }
-    }
-
-    //策略2：使用软件自带的FFmpeg(位于程序运行目录或项目根目录的FFmpeg_tools/bin/下)
-    QString appDir = QCoreApplication::applicationDirPath();
-    QStringList searchPaths;
-    searchPaths << QDir(appDir).filePath("FFmpeg_tools/bin/ffmpeg.exe");
-
-    //开发环境适配：exe在build/.../子目录中，向上回溯查找项目根目录下的FFmpeg_tools
-    QDir currentDir(appDir);
-    for (int i = 0; i < 4; ++i) {
-        if (!currentDir.cdUp()) break;
-        QString candidate = currentDir.filePath("FFmpeg_tools/bin/ffmpeg.exe");
-        if (!searchPaths.contains(candidate)) {
-            searchPaths << candidate;
-        }
-    }
-
-    //遍历候选路径，使用第一个存在的
-    bool foundBundled = false;
-    for (const QString &candidate : searchPaths) {
-        QFileInfo fi(candidate);
-        if (fi.exists() && fi.isExecutable()) {
-            m_ffmpegPath = candidate;
-            Logger::instance()->debug("FFmpeg", QString("✅ 使用软件自带FFmpeg: %1").arg(m_ffmpegPath));
-            foundBundled = true;
-            break;
-        }
-    }
-
-    if (!foundBundled) {
-        Logger::instance()->critical("FFmpeg",
-            QString("❌ 致命错误：未找到FFmpeg环境！自带路径不存在: %1").arg(searchPaths.join(" / ")));
-        m_ffmpegPath.clear();
-    }
-
+    m_ffmpegPath = ToolLocator::locate("ffmpeg", "FFmpeg_tools/bin/ffmpeg.exe", "FFmpeg");
     return m_ffmpegPath;
 }
 
@@ -347,7 +296,7 @@ void FFmpeg_module::onReadyReadStandardError() {
 
     //首次解析总时长(Duration: HH:MM:SS.xx)
     if (m_totalDuration <= 0) {
-        m_totalDuration = parseDuration(output);
+        m_totalDuration = parseTimeLine(output, m_durationRegex);
         if (m_totalDuration > 0) {
             Logger::instance()->debug("FFmpeg",
                 QString("✅ 解析到视频总时长: %1 秒").arg(m_totalDuration, 0, 'f', 2));
@@ -356,7 +305,7 @@ void FFmpeg_module::onReadyReadStandardError() {
 
     //解析当前处理时间(time=HH:MM:SS.xx)，计算进度百分比
     if (m_totalDuration > 0) {
-        double currentTime = parseCurrentTime(output);
+        double currentTime = parseTimeLine(output, m_timeRegex);
         if (currentTime > 0) {
             int percent = static_cast<int>((currentTime / m_totalDuration) * 100);
             if (percent >= 0 && percent <= 100) {
@@ -394,9 +343,9 @@ void FFmpeg_module::onFinished(int exitCode, QProcess::ExitStatus exitStatus) {
 
 // ========== 私有辅助函数 ==========
 
-//从stderr文本中解析总时长(秒)
-double FFmpeg_module::parseDuration(const QString &output) {
-    QRegularExpressionMatch match = m_durationRegex.match(output);
+//从stderr文本中解析时间(秒)，传入对应正则表达式(Duration或time=)
+double FFmpeg_module::parseTimeLine(const QString &output, const QRegularExpression &regex) {
+    QRegularExpressionMatch match = regex.match(output);
     if (!match.hasMatch()) {
         return 0.0;
     }
@@ -405,19 +354,5 @@ double FFmpeg_module::parseDuration(const QString &output) {
     int m = match.captured(2).toInt();
     int s = match.captured(3).toInt();
     int cs = match.captured(4).toInt();  //百分秒
-    return h * 3600 + m * 60 + s + cs / 100.0;
-}
-
-//从stderr文本中解析当前处理时间(秒)
-double FFmpeg_module::parseCurrentTime(const QString &output) {
-    QRegularExpressionMatch match = m_timeRegex.match(output);
-    if (!match.hasMatch()) {
-        return 0.0;
-    }
-
-    int h = match.captured(1).toInt();
-    int m = match.captured(2).toInt();
-    int s = match.captured(3).toInt();
-    int cs = match.captured(4).toInt();
     return h * 3600 + m * 60 + s + cs / 100.0;
 }

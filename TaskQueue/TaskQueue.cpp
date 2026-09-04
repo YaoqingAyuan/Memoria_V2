@@ -1,6 +1,6 @@
 #include "TaskQueue.h"
-#include "Core/DataModel.h"
-#include "Core/logger.h"
+#include "core/DataModel.h"
+#include "core/logger.h"
 #include <algorithm>
 
 TaskQueue::TaskQueue(DataModel *dataModel, QObject *parent)

@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QList>
-#include "Core/ParsedCacheData.h"
+#include "core/ParsedCacheData.h"
 
 //类声明
 class CacheFileParser
@@ -32,10 +32,8 @@ public:
 private:
     //递归展平JSON函数(通用辅助函数)
     void flattenJsonRecursive(const QJsonObject &obj, const QString &prefix, MetadataContainer &container);
-    //将entry.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool EntryflattenJson(const QString &filePath, MetadataContainer &container);
-    //将index.json文件中的字段，递归处理展开为一级字段(顺带去掉引号等特殊字符)
-    bool indexflattenJson(const QString &filePath, MetadataContainer &container);
+    //将JSON文件中的字段递归展平为一级字段(通用，适用于entry.json/index.json)
+    bool flattenJsonFile(const QString &filePath, const QString &fileLabel, MetadataContainer &container);
     //解析单个子目录(离线诊断ID下的一个c_xxx或番剧集号目录)
     //subDirPath=子目录路径，cacheRootPath=离线诊断ID根路径(用于cacheRootPath字段)
     bool parseSingleSubDir(const QString &subDirPath, const QString &cacheRootPath, ParsedCacheData &outData);

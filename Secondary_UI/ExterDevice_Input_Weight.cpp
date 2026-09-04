@@ -1,11 +1,12 @@
 #include "ExterDevice_Input_Weight.h"
 #include "ui_ExterDevice_Input_Weight.h"
+#include "Adb_Module/AdbImportWorker.h"
 
-#include "ADB_Module/AdbModule.h"
-#include "Parser_Module/CacheFileParser.h"
-#include "Core/ParsedCacheData.h"
-#include "Core/CacheManager.h"
-#include "Core/logger.h"
+#include "Adb_Module/AdbModule.h"
+#include "core/ParsedCacheData.h"
+#include "core/CacheManager.h"
+#include "core/logger.h"
+#include "core/utils.h"
 
 #include <QStandardItemModel>
 #include <QInputDialog>
@@ -19,15 +20,6 @@
 
 //B站缓存默认根路径
 const QString ExterDevice_Input_Weight::BILI_CACHE_ROOT = "/sdcard/Android/data/tv.danmaku.bili/download";
-
-//辅助：格式化文件大小
-static QString formatSize(qint64 bytes)
-{
-    if (bytes < 1024) return QString::number(bytes) + " B";
-    if (bytes < 1024 * 1024) return QString::number(bytes / 1024.0, 'f', 1) + " KB";
-    if (bytes < 1024 * 1024 * 1024) return QString::number(bytes / (1024.0 * 1024), 'f', 1) + " MB";
-    return QString::number(bytes / (1024.0 * 1024 * 1024), 'f', 2) + " GB";
-}
 
 //辅助：递归计算目录总大小
 static qint64 dirSize(const QString &path)
@@ -61,6 +53,7 @@ ExterDevice_Input_Weight::ExterDevice_Input_Weight(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::ExterDevice_Input_Weight)
     , m_adb(new AdbModule(this))
+    , m_importWorker(new AdbImportWorker(m_adb, this))
     , m_fileModel(new QStandardItemModel(this))
 {
     ui->setupUi(this);
@@ -70,9 +63,6 @@ ExterDevice_Input_Weight::ExterDevice_Input_Weight(QWidget *parent)
     QString adbPath = m_adb->selfCheck();
     updateAdbStatus(!adbPath.isEmpty(),
                     adbPath.isEmpty() ? QStringLiteral("ADB: 未找到") : QStringLiteral("ADB: 就绪"));
-
-    //设置本地拉取暂存目录（使用AppLocalData，不被系统自动清理）
-    m_localPullDir = CacheManager::instance().cacheDir();
 
     //自检通过则自动刷新设备列表
     if (!adbPath.isEmpty()) {
@@ -141,9 +131,20 @@ void ExterDevice_Input_Weight::initUI()
     //=== AdbModule信号连接 ===
     connect(m_adb, &AdbModule::deviceListChanged, this, &ExterDevice_Input_Weight::onDeviceListChanged);
     connect(m_adb, &AdbModule::dirListReady, this, &ExterDevice_Input_Weight::onDirListReady);
-    connect(m_adb, &AdbModule::pullProgressChanged, this, &ExterDevice_Input_Weight::onPullProgressChanged);
-    connect(m_adb, &AdbModule::pullFinished, this, &ExterDevice_Input_Weight::onPullFinished);
     connect(m_adb, &AdbModule::errorOccurred, this, &ExterDevice_Input_Weight::onAdbError);
+
+    //=== AdbImportWorker信号连接 ===
+    connect(m_importWorker, &AdbImportWorker::pullProgressChanged, this, &ExterDevice_Input_Weight::onPullProgressChanged);
+    connect(m_importWorker, &AdbImportWorker::pullStarted, this, [this](int current, int total, const QString &folderName) {
+        ui->progressLabel->setText(
+            QStringLiteral("拉取中 (%1/%2): %3").arg(current).arg(total).arg(folderName));
+    });
+    connect(m_importWorker, &AdbImportWorker::folderParsed, this, &ExterDevice_Input_Weight::onFolderParsed);
+    connect(m_importWorker, &AdbImportWorker::pullCompleted, this, [this](int completed, int total) {
+        ui->progressBar->setValue(100);
+        ui->progressLabel->setText(QStringLiteral("完成：已解析 %1/%2").arg(completed).arg(total));
+        ui->parseBtn->setEnabled(true);
+    });
 
     //配对/连接结果：更新状态标签 + 弹窗反馈
     connect(m_adb, &AdbModule::pairResult, this,
@@ -411,11 +412,6 @@ void ExterDevice_Input_Weight::onParseSelected()
         return;
     }
 
-    //初始化拉取队列
-    m_pullQueue = selectedPaths;
-    m_pullTotal = selectedPaths.size();
-    m_pullCompleted = 0;
-
     //清空预览树
     ui->previewTree->blockSignals(true);
     ui->previewTree->clear();
@@ -424,30 +420,9 @@ void ExterDevice_Input_Weight::onParseSelected()
     ui->selectAllCheck->setChecked(false);
     ui->selectAllCheck->blockSignals(false);
 
-    //开始拉取
+    //开始拉取+解析
     ui->parseBtn->setEnabled(false);
-    startNextPull();
-}
-
-void ExterDevice_Input_Weight::startNextPull()
-{
-    if (m_pullQueue.isEmpty()) {
-        //全部完成
-        ui->progressBar->setValue(100);
-        ui->progressLabel->setText(
-            QStringLiteral("完成：已解析 %1/%2").arg(m_pullCompleted).arg(m_pullTotal));
-        ui->parseBtn->setEnabled(true);
-        return;
-    }
-
-    QString remotePath = m_pullQueue.takeFirst();
-    QString folderName = remotePath.section('/', -1);
-    QString localPath = m_localPullDir + "/" + folderName;
-
-    ui->progressLabel->setText(
-        QStringLiteral("拉取中 (%1/%2): %3").arg(m_pullCompleted + 1).arg(m_pullTotal).arg(folderName));
-
-    m_adb->pullFile(m_currentSerial, remotePath, localPath);
+    m_importWorker->startPull(selectedPaths, m_currentSerial, CacheManager::instance().cacheDir());
 }
 
 void ExterDevice_Input_Weight::onPullProgressChanged(int percentage)
@@ -455,46 +430,15 @@ void ExterDevice_Input_Weight::onPullProgressChanged(int percentage)
     ui->progressBar->setValue(percentage);
 }
 
-void ExterDevice_Input_Weight::onPullFinished(const QString &localPath, bool success, const QString &message)
+void ExterDevice_Input_Weight::onFolderParsed(const QString &folderName, const QList<ParsedCacheData> &parsedList,
+                                              const QString &localPath, bool success)
 {
-    m_pullCompleted++;
-
-    if (success) {
-        parsePulledFolder(localPath);
-    } else {
-        Logger::instance()->warning("WLAN_Input", QString("拉取失败: %1").arg(message));
-        //在预览树中显示失败项
-        QString folderName = QFileInfo(localPath).fileName();
-        ui->previewTree->blockSignals(true);
-        auto *failItem = new QTreeWidgetItem({"📁 " + folderName, ""});
-        failItem->setCheckState(0, Qt::Unchecked);
-        failItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("❌ 拉取失败")}));
-        ui->previewTree->addTopLevelItem(failItem);
-        ui->previewTree->blockSignals(false);
-    }
-
-    startNextPull();
-}
-
-void ExterDevice_Input_Weight::parsePulledFolder(const QString &localPath)
-{
-    CacheFileParser parser;
-    QList<ParsedCacheData> parsedList;
-    bool ok = parser.Cathe_Parse(localPath, parsedList);
-
-    QString folderName = QFileInfo(localPath).fileName();
-
-    //缓存解析结果，供 onConfirmImport 取出勾选项
-    if (ok && !parsedList.isEmpty()) {
-        m_parsedData[folderName] = parsedList;
-    }
-
     ui->previewTree->blockSignals(true);
 
     auto *folderItem = new QTreeWidgetItem({"📁 " + folderName, ""});
     folderItem->setCheckState(0, Qt::Unchecked);
 
-    if (ok && !parsedList.isEmpty()) {
+    if (success && !parsedList.isEmpty()) {
         //多P场景：取第一个的有效信息作为标题/UP主/Bv号（同一视频各P信息一致）
         const auto &first = parsedList.first();
         folderItem->addChild(new QTreeWidgetItem({QStringLiteral("标题"), first.videoInfo.title}));
@@ -512,8 +456,10 @@ void ExterDevice_Input_Weight::parsePulledFolder(const QString &localPath)
         folderItem->addChild(new QTreeWidgetItem({QStringLiteral("大小"), formatSize(dirSize(localPath))}));
         folderItem->addChild(new QTreeWidgetItem(
             {QStringLiteral("状态"), QStringLiteral("✓ 已解析 (%1P)").arg(parsedList.size())}));
-    } else {
+    } else if (success && parsedList.isEmpty()) {
         folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("❌ 解析失败")}));
+    } else {
+        folderItem->addChild(new QTreeWidgetItem({QStringLiteral("状态"), QStringLiteral("❌ 拉取失败")}));
     }
 
     ui->previewTree->addTopLevelItem(folderItem);
@@ -542,11 +488,12 @@ void ExterDevice_Input_Weight::onConfirmImport()
         return;
     }
 
-    //从m_parsedData中取出勾选项的解析数据，合并为一个列表
+    //从worker中取出已解析的数据，合并勾选项
+    QMap<QString, QList<ParsedCacheData>> allData = m_importWorker->takeParsedData();
     QList<ParsedCacheData> importList;
     for (const QString &folderName : selectedIds) {
-        auto it = m_parsedData.find(folderName);
-        if (it != m_parsedData.end()) {
+        auto it = allData.find(folderName);
+        if (it != allData.end()) {
             for (const ParsedCacheData &data : it.value()) {
                 importList << data;
             }

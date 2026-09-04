@@ -1,7 +1,7 @@
 #include "Setting_Dialog.h"
 #include "ui_Setting_Dialog.h"
-#include "../Core/DataModel.h"
-#include "../Core/CacheManager.h"
+#include "../core/DataModel.h"
+#include "../core/CacheManager.h"
 #include <QMessageBox>
 
 Setting_Dialog::Setting_Dialog(DataModel *model, QWidget *parent)

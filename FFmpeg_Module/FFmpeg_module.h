@@ -15,7 +15,7 @@
 #include <QString>
 #include <QStringList>
 #include <QRegularExpression>
-#include "Core/ParsedCacheData.h"
+#include "core/ParsedCacheData.h"
 
 //输出格式枚举(对应UI"格式选择对话框"的4种选项)
 enum class OutputFormat {
@@ -111,11 +111,8 @@ private:
     QStringList buildCopyCommand(const MuxRequest &request, const QString &formatExt);
     QStringList buildWebmCommand(const MuxRequest &request);
 
-    //从stderr文本中解析总时长(秒)
-    double parseDuration(const QString &output);
-
-    //从stderr文本中解析当前处理时间(秒)
-    double parseCurrentTime(const QString &output);
+    //从stderr文本中解析时间(秒)，传入对应正则表达式(Duration或time=)
+    double parseTimeLine(const QString &output, const QRegularExpression &regex);
 };
 
 #endif // FFMPEG_MODULE_H

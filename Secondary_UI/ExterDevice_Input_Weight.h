@@ -8,7 +8,7 @@
 #include <QList>
 #include <QMap>
 #include <QString>
-#include "Core/ParsedCacheData.h"
+#include "core/ParsedCacheData.h"
 
 namespace Ui {
 class ExterDevice_Input_Weight;
@@ -18,6 +18,7 @@ class QTreeWidgetItem;
 class QStandardItemModel;
 class QModelIndex;
 class AdbModule;
+class AdbImportWorker;
 struct AdbDeviceInfo;
 struct AdbDirEntry;
 
@@ -50,7 +51,8 @@ private slots:
     //=== 拉取+解析 ===
     void onParseSelected();             //解析选中 → adb pull + CacheFileParser
     void onPullProgressChanged(int percentage);
-    void onPullFinished(const QString &localPath, bool success, const QString &message);
+    void onFolderParsed(const QString &folderName, const QList<ParsedCacheData> &parsedList,
+                        const QString &localPath, bool success);
 
     //=== 预览/导入 ===
     void onConfirmImport();
@@ -64,25 +66,15 @@ private:
     void initUI();
     void updateAdbStatus(bool ready, const QString &text);
     void browseDir(const QString &remotePath);       //请求浏览指定远程目录
-    void startNextPull();                             //从拉取队列取下一项执行
-    void parsePulledFolder(const QString &localPath); //解析已拉取到本地的文件夹
 
     Ui::ExterDevice_Input_Weight *ui;
     AdbModule *m_adb;
+    AdbImportWorker *m_importWorker;
     QStandardItemModel *m_fileModel;     //远程文件列表数据模型
 
     //ADB状态
     QString m_currentSerial;             //当前选中设备的序列号
     QString m_currentRemotePath;         //当前浏览的远程路径
-
-    //拉取队列（ADB串行执行，一次只pull一个）
-    QStringList m_pullQueue;             //待拉取的远程路径队列
-    int m_pullTotal = 0;                 //本次批量拉取总数
-    int m_pullCompleted = 0;             //已完成拉取数
-    QString m_localPullDir;              //本地拉取暂存目录
-
-    //解析结果缓存：folderName → 解析出的P列表（onConfirmImport时取出勾选项）
-    QMap<QString, QList<ParsedCacheData>> m_parsedData;
 
     //B站缓存默认根路径
     static const QString BILI_CACHE_ROOT;

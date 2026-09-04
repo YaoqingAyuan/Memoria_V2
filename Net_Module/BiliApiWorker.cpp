@@ -1,5 +1,5 @@
 #include "BiliApiWorker.h"
-#include "Core/logger.h"
+#include "core/logger.h"
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -59,16 +59,16 @@ void BiliApiWorker::searchByKeyword(const QString &keyword, int page)
     });
 }
 
-void BiliApiWorker::searchByBvid(const QString &bvid)
+void BiliApiWorker::searchById(const QString &id, bool isBvid)
 {
-    //用view接口查询BV号信息(同时用于下架检测)
+    //用view接口查询BV/AV号信息(同时用于下架检测)
     QUrl url("https://api.bilibili.com/x/web-interface/view");
     QUrlQuery query;
-    query.addQueryItem("bvid", bvid);
+    query.addQueryItem(isBvid ? "bvid" : "aid", id);
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, id]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             emit searchFailed(reply->errorString());
@@ -83,7 +83,7 @@ void BiliApiWorker::searchByBvid(const QString &bvid)
         if (code != 0) {
             //错误码 -404/"稿件不可见" 或 -400/"请求错误" 均视为不可访问
             QString message = root.value("message").toString();
-            emit availabilityChecked(bvid, false, message);
+            emit availabilityChecked(id, false, message);
             return;
         }
 
@@ -91,44 +91,8 @@ void BiliApiWorker::searchByBvid(const QString &bvid)
         QList<BiliSearchResult> list;
         list.append(result);
         emit searchResultReady(list);
-        emit availabilityChecked(bvid, true, QStringLiteral("视频正常在线"));
-    });
-}
-
-void BiliApiWorker::searchByAvid(qint64 avid)
-{
-    //bvid为空时用avid查询(view API支持aid参数)
-    QUrl url("https://api.bilibili.com/x/web-interface/view");
-    QUrlQuery query;
-    query.addQueryItem("aid", QString::number(avid));
-    url.setQuery(query);
-
-    QNetworkReply *reply = m_nam->get(createRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, avid]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit searchFailed(reply->errorString());
-            return;
-        }
-
-        QByteArray data = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(data);
-        QJsonObject root = doc.object();
-        int code = root.value("code").toInt();
-
-        if (code != 0) {
-            QString message = root.value("message").toString();
-            //bvid未知，用avid构造标识
-            emit availabilityChecked(QString::number(avid), false, message);
-            return;
-        }
-
-        BiliSearchResult result = parseVideoInfo(data);
-        QList<BiliSearchResult> list;
-        list.append(result);
-        //用API返回的真实bvid发出下架检测信号
-        emit searchResultReady(list);
-        emit availabilityChecked(result.bvid, true, QStringLiteral("视频正常在线"));
+        //用API返回的真实bvid发出下架检测信号(若返回值为空则回退到传入ID)
+        emit availabilityChecked(result.bvid.isEmpty() ? id : result.bvid, true, QStringLiteral("视频正常在线"));
     });
 }
 
@@ -136,26 +100,39 @@ void BiliApiWorker::searchByAvid(qint64 avid)
 
 void BiliApiWorker::checkAvailability(const QString &bvid)
 {
-    //searchByBvid 内部已经完成了下架检测(view接口返回code即判定)
-    searchByBvid(bvid);
+    //searchById 内部已经完成了下架检测(view接口返回code即判定)
+    searchById(bvid, true);
 }
 
 // ========== 获取播放地址 ==========
 
 void BiliApiWorker::fetchPlayUrl(const QString &bvid, int cid, int quality)
 {
+    fetchPlayUrlInternal(bvid, cid, quality, false);
+}
+
+void BiliApiWorker::fetchPlayUrlDash(const QString &bvid, int cid, int quality)
+{
+    fetchPlayUrlInternal(bvid, cid, quality, true);
+}
+
+//获取播放地址内部实现(MP4/DASH通用)
+//dash=false: MP4格式(fnval=0)，解析durl取单个流地址，发射playUrlReady
+//dash=true:  DASH格式(fnval=4048)，解析分离的音视频流，发射playUrlDashReady
+void BiliApiWorker::fetchPlayUrlInternal(const QString &bvid, int cid, int quality, bool dash)
+{
     QUrl url("https://api.bilibili.com/x/player/playurl");
     QUrlQuery query;
     query.addQueryItem("bvid", bvid);
     query.addQueryItem("cid", QString::number(cid));
     query.addQueryItem("qn", QString::number(quality));
-    query.addQueryItem("fnval", "0");   //仅MP4格式(非DASH)，便于QMediaPlayer直接播放
+    query.addQueryItem("fnval", dash ? "4048" : "0");   //DASH+HDR+4K+Dolby+8K+AV1 或 仅MP4
     query.addQueryItem("fnver", "0");
-    query.addQueryItem("fourk", "0");
+    query.addQueryItem("fourk", dash ? "1" : "0");       //允许4K
     url.setQuery(query);
 
     QNetworkReply *reply = m_nam->get(createRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid, dash]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             Logger::instance()->warning("BiliApi", QString("播放地址请求失败: %1").arg(reply->errorString()));
@@ -174,122 +151,93 @@ void BiliApiWorker::fetchPlayUrl(const QString &bvid, int cid, int quality)
         }
 
         QJsonObject data = root.value("data").toObject();
-        QJsonArray durl = data.value("durl").toArray();
-        if (durl.isEmpty()) {
-            Logger::instance()->warning("BiliApi", "播放地址durl为空(fnval=0可能不支持此视频)");
-            emit playUrlFailed(QStringLiteral("未获取到播放地址(可能需要登录)"));
-            return;
-        }
 
-        //取第一个流地址
-        QString playUrl = durl.at(0).toObject().value("url").toString();
-        if (playUrl.startsWith("//"))
-            playUrl = "https:" + playUrl;
+        if (dash) {
+            //=== DASH模式：解析分离的音视频流 ===
+            QJsonObject dashObj = data.value("dash").toObject();
+            QJsonArray videoArr = dashObj.value("video").toArray();
+            QJsonArray audioArr = dashObj.value("audio").toArray();
 
-        Logger::instance()->debug("BiliApi", QString("获取播放地址成功: %1").arg(bvid));
-        emit playUrlReady(bvid, playUrl);
-    });
-}
-
-void BiliApiWorker::fetchPlayUrlDash(const QString &bvid, int cid, int quality)
-{
-    QUrl url("https://api.bilibili.com/x/player/playurl");
-    QUrlQuery query;
-    query.addQueryItem("bvid", bvid);
-    query.addQueryItem("cid", QString::number(cid));
-    query.addQueryItem("qn", QString::number(quality));
-    query.addQueryItem("fnval", "4048");  //DASH+HDR+4K+Dolby+8K+AV1
-    query.addQueryItem("fnver", "0");
-    query.addQueryItem("fourk", "1");      //允许4K
-    url.setQuery(query);
-
-    QNetworkReply *reply = m_nam->get(createRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, bvid]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            Logger::instance()->warning("BiliApi", QString("DASH播放地址请求失败: %1").arg(reply->errorString()));
-            emit playUrlFailed(reply->errorString());
-            return;
-        }
-
-        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        QJsonObject root = doc.object();
-        int code = root.value("code").toInt();
-        if (code != 0) {
-            QString errMsg = root.value("message").toString();
-            Logger::instance()->warning("BiliApi", QString("DASH播放地址API错误: code=%1, msg=%2").arg(code).arg(errMsg));
-            emit playUrlFailed(errMsg);
-            return;
-        }
-
-        QJsonObject data = root.value("data").toObject();
-        QJsonObject dash = data.value("dash").toObject();
-        QJsonArray videoArr = dash.value("video").toArray();
-        QJsonArray audioArr = dash.value("audio").toArray();
-
-        if (videoArr.isEmpty()) {
-            Logger::instance()->warning("BiliApi", "DASH视频流为空");
-            emit playUrlFailed(QStringLiteral("DASH视频流为空"));
-            return;
-        }
-
-        //选择最高画质的H.264视频流(codecid=7)，无H.264则取最高画质任意编码
-        QJsonObject bestVideo;
-        int bestVideoId = -1;
-        QJsonObject bestH264Video;
-        int bestH264Id = -1;
-        for (const QJsonValue &v : videoArr) {
-            QJsonObject obj = v.toObject();
-            int qid = obj.value("id").toInt();
-            int codecid = obj.value("codecid").toInt();
-            if (qid > bestVideoId) {
-                bestVideoId = qid;
-                bestVideo = obj;
+            if (videoArr.isEmpty()) {
+                Logger::instance()->warning("BiliApi", "DASH视频流为空");
+                emit playUrlFailed(QStringLiteral("DASH视频流为空"));
+                return;
             }
-            if (codecid == 7 && qid > bestH264Id) {
-                bestH264Id = qid;
-                bestH264Video = obj;
+
+            //选择最高画质的H.264视频流(codecid=7)，无H.264则取最高画质任意编码
+            QJsonObject bestVideo;
+            int bestVideoId = -1;
+            QJsonObject bestH264Video;
+            int bestH264Id = -1;
+            for (const QJsonValue &v : videoArr) {
+                QJsonObject obj = v.toObject();
+                int qid = obj.value("id").toInt();
+                int codecid = obj.value("codecid").toInt();
+                if (qid > bestVideoId) {
+                    bestVideoId = qid;
+                    bestVideo = obj;
+                }
+                if (codecid == 7 && qid > bestH264Id) {
+                    bestH264Id = qid;
+                    bestH264Video = obj;
+                }
             }
-        }
-        QJsonObject videoObj = !bestH264Video.isEmpty() ? bestH264Video : bestVideo;
+            QJsonObject videoObj = !bestH264Video.isEmpty() ? bestH264Video : bestVideo;
 
-        //选择最高码率的音频流
-        QJsonObject bestAudio;
-        int bestAudioBw = -1;
-        for (const QJsonValue &a : audioArr) {
-            QJsonObject obj = a.toObject();
-            int bw = obj.value("bandwidth").toInt();
-            if (bw > bestAudioBw) {
-                bestAudioBw = bw;
-                bestAudio = obj;
+            //选择最高码率的音频流
+            QJsonObject bestAudio;
+            int bestAudioBw = -1;
+            for (const QJsonValue &a : audioArr) {
+                QJsonObject obj = a.toObject();
+                int bw = obj.value("bandwidth").toInt();
+                if (bw > bestAudioBw) {
+                    bestAudioBw = bw;
+                    bestAudio = obj;
+                }
             }
+
+            QString videoUrl = videoObj.value("baseUrl").toString();
+            if (videoUrl.isEmpty())
+                videoUrl = videoObj.value("base_url").toString();
+            if (videoUrl.startsWith("//"))
+                videoUrl = "https:" + videoUrl;
+
+            QString audioUrl;
+            if (!bestAudio.isEmpty()) {
+                audioUrl = bestAudio.value("baseUrl").toString();
+                if (audioUrl.isEmpty())
+                    audioUrl = bestAudio.value("base_url").toString();
+                if (audioUrl.startsWith("//"))
+                    audioUrl = "https:" + audioUrl;
+            }
+
+            if (videoUrl.isEmpty()) {
+                emit playUrlFailed(QStringLiteral("无法解析DASH视频URL"));
+                return;
+            }
+
+            int actualQn = data.value("quality").toInt();
+            Logger::instance()->debug("BiliApi",
+                QString("DASH播放地址成功: %1, 实际画质qn=%2, 视频qn=%3")
+                    .arg(bvid).arg(actualQn).arg(videoObj.value("id").toInt()));
+            emit playUrlDashReady(bvid, videoUrl, audioUrl);
+        } else {
+            //=== MP4模式：解析durl数组取第一个流地址 ===
+            QJsonArray durl = data.value("durl").toArray();
+            if (durl.isEmpty()) {
+                Logger::instance()->warning("BiliApi", "播放地址durl为空(fnval=0可能不支持此视频)");
+                emit playUrlFailed(QStringLiteral("未获取到播放地址(可能需要登录)"));
+                return;
+            }
+
+            //取第一个流地址
+            QString playUrl = durl.at(0).toObject().value("url").toString();
+            if (playUrl.startsWith("//"))
+                playUrl = "https:" + playUrl;
+
+            Logger::instance()->debug("BiliApi", QString("获取播放地址成功: %1").arg(bvid));
+            emit playUrlReady(bvid, playUrl);
         }
-
-        QString videoUrl = videoObj.value("baseUrl").toString();
-        if (videoUrl.isEmpty())
-            videoUrl = videoObj.value("base_url").toString();
-        if (videoUrl.startsWith("//"))
-            videoUrl = "https:" + videoUrl;
-
-        QString audioUrl;
-        if (!bestAudio.isEmpty()) {
-            audioUrl = bestAudio.value("baseUrl").toString();
-            if (audioUrl.isEmpty())
-                audioUrl = bestAudio.value("base_url").toString();
-            if (audioUrl.startsWith("//"))
-                audioUrl = "https:" + audioUrl;
-        }
-
-        if (videoUrl.isEmpty()) {
-            emit playUrlFailed(QStringLiteral("无法解析DASH视频URL"));
-            return;
-        }
-
-        int actualQn = data.value("quality").toInt();
-        Logger::instance()->debug("BiliApi",
-            QString("DASH播放地址成功: %1, 实际画质qn=%2, 视频qn=%3")
-                .arg(bvid).arg(actualQn).arg(videoObj.value("id").toInt()));
-        emit playUrlDashReady(bvid, videoUrl, audioUrl);
     });
 }
 

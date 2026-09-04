@@ -4,7 +4,7 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QList>
-#include "Core/ParsedCacheData.h"
+#include "core/ParsedCacheData.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {

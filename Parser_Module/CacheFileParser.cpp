@@ -1,6 +1,6 @@
 #include "CacheFileParser.h"
-#include "Core/ParsedCacheData.h"
-#include "Core/logger.h"
+#include "core/ParsedCacheData.h"
+#include "core/logger.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -25,9 +25,9 @@
  *               |
  *     +---------+---------+
  *     ↓                   ↓
- * | EntryflattenJson() |  | indexflattenJson() | <--递归展平两Json文件
+ * | flattenJsonFile()    |  <-- 通用展平函数(传入文件路径+标签)
  *          ↓                   ↓
- *         |  flattenJsonRecursive     |  <-- 两展平函数共同调用flattenJsonRecursive
+ *         |  flattenJsonRecursive     |  <-- 递归展平JSON对象为一级键值对
  *         |  (entry.json&index.json)  |
  *          ↓                   ↓
  * |outData.entryJsonData|  |outData.indexJsonData |
@@ -112,12 +112,12 @@ bool CacheFileParser::parseSingleSubDir(const QString &subDirPath, const QString
     }
 
     //步骤3:展平JSON文件(先展平，后解析)
-    if (!EntryflattenJson(outData.videoInfo.entryJsonPath, outData.entryJsonData)) {
+    if (!flattenJsonFile(outData.videoInfo.entryJsonPath, "entry.json", outData.entryJsonData)) {
         Logger::instance()->critical("Parser", "❌ 致命错误：展平 entry.json 失败");
         return false;
     }
 
-    if (!indexflattenJson(outData.videoInfo.indexJsonPath, outData.indexJsonData)) {
+    if (!flattenJsonFile(outData.videoInfo.indexJsonPath, "index.json", outData.indexJsonData)) {
         Logger::instance()->critical("Parser", "❌ 致命错误：展平 index.json 失败");
         return false;
     }
@@ -183,17 +183,17 @@ void CacheFileParser::flattenJsonRecursive(const QJsonObject &obj, const QString
     }
 }
 
-//Entry.json展平(flatten)函数:读取文件+递归展平→送入容器EntryJsonData
-bool CacheFileParser::EntryflattenJson(const QString &filePath, MetadataContainer &container) {
+//JSON文件展平(flatten)函数:读取文件+递归展平→送入容器(通用，适用于entry.json/index.json)
+bool CacheFileParser::flattenJsonFile(const QString &filePath, const QString &fileLabel, MetadataContainer &container) {
     QFile file(filePath);
 
     if (!file.exists()) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：entry.json 不存在: %1").arg(filePath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：%1 不存在: %2").arg(fileLabel).arg(filePath));
         return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：无法打开 entry.json: %1, 原因: %2").arg(filePath).arg(file.errorString()));
+        Logger::instance()->critical("Parser", QString("❌ 错误：无法打开 %1: %2, 原因: %3").arg(fileLabel).arg(filePath).arg(file.errorString()));
         return false;
     }
 
@@ -202,14 +202,14 @@ bool CacheFileParser::EntryflattenJson(const QString &filePath, MetadataContaine
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
     if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：entry.json 格式损坏或为空: %1").arg(filePath));
+        Logger::instance()->critical("Parser", QString("❌ 错误：%1 格式损坏或为空: %2").arg(fileLabel).arg(filePath));
         return false;
     }
 
     container.clear();
     flattenJsonRecursive(jsonDoc.object(), "", container);
 
-    Logger::instance()->debug("Parser", QString("✅ entry.json 展平完成，共 %1 个字段").arg(container.size()));
+    Logger::instance()->debug("Parser", QString("✅ %1 展平完成，共 %2 个字段").arg(fileLabel).arg(container.size()));
     return true;
 }
 
@@ -266,36 +266,6 @@ bool CacheFileParser::parseEntryJson(ParsedCacheData &data) {
         Logger::instance()->debug("Parser", QString("✅ 成功解析页面数据: CID=%1, 宽=%2, 高=%3").arg(data.videoInfo.page_ep_Data.cid).arg(data.videoInfo.page_ep_Data.width).arg(data.videoInfo.page_ep_Data.height));
     }
 
-    return true;
-}
-
-//index.json展平(flatten)函数:读取文件+递归展平→送入容器IndexJsonData
-bool CacheFileParser::indexflattenJson(const QString &filePath, MetadataContainer &container) {
-    QFile file(filePath);
-
-    if (!file.exists()) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：index.json 不存在: %1").arg(filePath));
-        return false;
-    }
-
-    if (!file.open(QIODevice::ReadOnly)) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：无法打开 index.json: %1, 原因: %2").arg(filePath).arg(file.errorString()));
-        return false;
-    }
-
-    QByteArray data = file.readAll();
-    file.close();
-
-    QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
-    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        Logger::instance()->critical("Parser", QString("❌ 错误：index.json 格式损坏或为空: %1").arg(filePath));
-        return false;
-    }
-
-    container.clear();
-    flattenJsonRecursive(jsonDoc.object(), "", container);
-
-    Logger::instance()->debug("Parser", QString("✅ index.json 展平完成，共 %1 个字段").arg(container.size()));
     return true;
 }
 

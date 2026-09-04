@@ -63,4 +63,13 @@ inline QString sanitizeFileName(const QString &name, const QString &fallback = Q
     return safe;
 }
 
+//格式化文件大小为人类可读字符串(B/KB/MB/GB)
+inline QString formatSize(qint64 bytes)
+{
+    if (bytes < 1024) return QString::number(bytes) + " B";
+    if (bytes < 1024 * 1024) return QString::number(bytes / 1024.0, 'f', 1) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return QString::number(bytes / (1024.0 * 1024), 'f', 1) + " MB";
+    return QString::number(bytes / (1024.0 * 1024 * 1024), 'f', 2) + " GB";
+}
+
 #endif // UTILS_H

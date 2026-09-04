@@ -5,7 +5,7 @@
 #include <QUrlQuery>
 #include <QPointer>
 #include <QSharedPointer>
-#include "Core/logger.h"
+#include "core/logger.h"
 
 HttpProxyServer::HttpProxyServer(QObject *parent)
     : QObject(parent)

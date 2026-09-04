@@ -1,5 +1,6 @@
 #include "AdbModule.h"
-#include "Core/logger.h"
+#include "core/logger.h"
+#include "core/ToolLocator.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -61,53 +62,7 @@ AdbModule::~AdbModule()
 
 QString AdbModule::selfCheck()
 {
-    Logger::instance()->debug("ADB", ">>> 开始自检验证：检测ADB环境");
-
-    //策略1：检测系统PATH中是否有adb（Windows用where命令）
-    QProcess probe;
-    probe.start("where", QStringList() << "adb");
-    bool found = probe.waitForFinished(3000);
-    if (found && probe.exitCode() == 0) {
-        QString result = QString::fromLocal8Bit(probe.readAllStandardOutput()).trimmed();
-        if (!result.isEmpty() && !result.contains("INFO: Could not find files")) {
-            m_adbPath = result.split('\n').first().trimmed();
-            Logger::instance()->debug("ADB", QString("✅ 检测到用户环境ADB: %1").arg(m_adbPath));
-            return m_adbPath;
-        }
-    }
-
-    //策略2：使用软件自带的ADB（位于 ADB_tools/bin/adb.exe）
-    QString appDir = QCoreApplication::applicationDirPath();
-    QStringList searchPaths;
-    searchPaths << QDir(appDir).filePath("ADB_tools/bin/adb.exe");
-
-    //开发环境适配：exe在build/子目录中，向上回溯查找项目根目录下的ADB_tools
-    QDir currentDir(appDir);
-    for (int i = 0; i < 4; ++i) {
-        if (!currentDir.cdUp()) break;
-        QString candidate = currentDir.filePath("ADB_tools/bin/adb.exe");
-        if (!searchPaths.contains(candidate)) {
-            searchPaths << candidate;
-        }
-    }
-
-    bool foundBundled = false;
-    for (const QString &candidate : searchPaths) {
-        QFileInfo fi(candidate);
-        if (fi.exists() && fi.isExecutable()) {
-            m_adbPath = candidate;
-            Logger::instance()->debug("ADB", QString("✅ 使用软件自带ADB: %1").arg(m_adbPath));
-            foundBundled = true;
-            break;
-        }
-    }
-
-    if (!foundBundled) {
-        Logger::instance()->critical("ADB",
-            QString("❌ 未找到ADB环境！搜索路径: %1").arg(searchPaths.join(" / ")));
-        m_adbPath.clear();
-    }
-
+    m_adbPath = ToolLocator::locate("adb", "ADB_tools/bin/adb.exe", "ADB");
     return m_adbPath;
 }
 

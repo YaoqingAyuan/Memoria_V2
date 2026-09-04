@@ -67,16 +67,18 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
 
         FFmpeg_Module/FFmpeg_module.h FFmpeg_Module/FFmpeg_module.cpp
 
-        Core/ParsedCacheData.h Core/ParsedCacheData.cpp
+        core/ParsedCacheData.h core/ParsedCacheData.cpp
         TaskQueue/TaskQueue.h TaskQueue/TaskQueue.cpp
-        Core/utils.h
+        core/utils.h
         Parser_Module/CacheFileParser.h Parser_Module/CacheFileParser.cpp
-        Core/DataModel.h Core/DataModel.cpp
-        Core/CacheManager.h Core/CacheManager.cpp
+        core/DataModel.h core/DataModel.cpp
+        core/CacheManager.h core/CacheManager.cpp
 
-        Core/logger.h Core/logger.cpp
+        core/logger.h core/logger.cpp
+        core/ToolLocator.h core/ToolLocator.cpp
         Secondary_UI/Output_Setting_Dlog.h Secondary_UI/Output_Setting_Dlog.cpp Secondary_UI/Output_Setting_Dlog.ui
         Secondary_UI/VideoPlayback_Weight.h Secondary_UI/VideoPlayback_Weight.cpp Secondary_UI/VideoPlayback_Weight.ui
+        Secondary_UI/LoginManager.h Secondary_UI/LoginManager.cpp
         Secondary_UI/Independ_Import_Dialog.h Secondary_UI/Independ_Import_Dialog.cpp Secondary_UI/Independ_Import_Dialog.ui
 
         Secondary_UI/ExterDevice_Input_Weight.h Secondary_UI/ExterDevice_Input_Weight.cpp Secondary_UI/ExterDevice_Input_Weight.ui
@@ -84,6 +86,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         Secondary_UI/MetadataViewer_Dialog.h Secondary_UI/MetadataViewer_Dialog.cpp Secondary_UI/MetadataViewer_Dialog.ui
         Adb_Module/AdbTypes.h
         Adb_Module/AdbModule.h Adb_Module/AdbModule.cpp
+        Adb_Module/AdbImportWorker.h Adb_Module/AdbImportWorker.cpp
 
         Net_Module/BiliSearchResult.h
         Net_Module/BiliApiWorker.h Net_Module/BiliApiWorker.cpp
@@ -129,8 +132,8 @@ target_link_libraries(Memoria_N_V2 PRIVATE
     Qt${QT_VERSION_MAJOR}::Network
 )
 
-#将项目根目录及Core子目录加入包含路径，使各子目录中的文件可通过 "Core/xxx.h" 或 "xxx.h" 引用核心头文件
-target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/Core)
+#将项目根目录及core子目录加入包含路径，使各子目录中的文件可通过 "core/xxx.h" 或 "xxx.h" 引用核心头文件
+target_include_directories(Memoria_N_V2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/core)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

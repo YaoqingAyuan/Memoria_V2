@@ -20,10 +20,9 @@ public:
     //=== 搜索 ===
     //按关键词搜索视频
     void searchByKeyword(const QString &keyword, int page = 1);
-    //按BV号精确查询视频信息(用于下架检测)
-    void searchByBvid(const QString &bvid);
-    //按AV号精确查询(bvid为空时用avid回退，view API支持aid参数)
-    void searchByAvid(qint64 avid);
+    //按BV/AV号精确查询视频信息(同时用于下架检测)
+    //isBvid=true用bvid参数查询，isBvid=false用aid参数查询
+    void searchById(const QString &id, bool isBvid);
 
     //=== 下架检测 ===
     //检查指定BV号视频是否可访问(返回isAvailable + 详情)
@@ -89,6 +88,9 @@ private:
     QList<BiliSearchResult> parseSearchResults(const QByteArray &data);
     //解析视频信息API返回的JSON(view接口)
     BiliSearchResult parseVideoInfo(const QByteArray &data);
+
+    //获取播放地址内部实现(MP4/DASH通用)
+    void fetchPlayUrlInternal(const QString &bvid, int cid, int quality, bool dash);
 };
 
 #endif // BILIAPIWORKER_H
