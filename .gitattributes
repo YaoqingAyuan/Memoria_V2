@@ -1,0 +1,8 @@
+# GitHub Linguist: mark third-party/bundled tools as vendored
+# so they are excluded from repository language statistics.
+# FFmpeg_tools/ contains bundled ffmpeg.exe + 32 large HTML doc files (~10MB)
+# that were incorrectly inflating HTML to 97.6% of the language breakdown.
+FFmpeg_tools/** linguist-vendored=true
+
+# ThirdParty/ contains the Nayuki QR Code Generator library (not our code)
+ThirdParty/** linguist-vendored=true
