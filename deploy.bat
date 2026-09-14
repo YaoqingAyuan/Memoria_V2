@@ -2,19 +2,18 @@
 setlocal enabledelayedexpansion
 
 REM ============================================================
-REM  Memoria_N_V2 ���а沿��ű� (deploy.bat)
+REM  Memoria_N_V2 发行版部署脚本 (deploy.bat)
 REM ============================================================
-REM  �÷�:
-REM    1. Release ģʽ������Ŀ, �õ� Memoria_N_V2.exe
-REM    2. �½�һ�����ļ�����Ϊ����Ŀ¼
-REM    3. �� Memoria_N_V2.exe �ͱ��ű�������ļ���
-REM    4. ˫�����б��ű�
-REM    5. ��ɺ�ѹ�����ļ���Ϊ .zip ���ɷ���
+REM  用法:
+REM    1. Release 模式编译项目, 得到 Memoria_N_V2.exe
+REM    2. 新建一个空文件夹作为发布目录
+REM    3. 将 Memoria_N_V2.exe 和本脚本放入该文件夹
+REM    4. 双击运行本脚本
+REM    5. 完成后压缩该文件夹为 .zip 即可发行
 REM ============================================================
 
-REM ====== �������� (·���б䶯ʱ�޸�����) ======
-set "QT_BIN=D:\Qt\6.11.1\mingw_64\bin"
-set "MINGW_BIN=D:\Qt\Tools\mingw1310_64\bin"
+REM ====== 可配置项 (路径有变动时修改这里) ======
+set "QT_BIN=D:\Qt\6.11.1\msvc2022_64\bin"
 set "PROJECT_ROOT=D:\Github Clone\Memoria_V2"
 set "EXE_NAME=Memoria_N_V2.exe"
 REM ==============================================
@@ -22,87 +21,87 @@ REM ==============================================
 set "DEPLOY_DIR=%~dp0"
 cd /d "%DEPLOY_DIR%"
 
-REM �� Qt / MinGW bin ���� PATH (windeployqt ��������)
-set "PATH=%QT_BIN%;%MINGW_BIN%;%PATH%"
+REM 将 Qt bin 加入 PATH (windeployqt 运行依赖)
+set "PATH=%QT_BIN%;%PATH%"
 
 echo ============================================================
-echo   Memoria_N_V2 ���а沿��ű�
+echo   Memoria_N_V2 发行版部署脚本
 echo ============================================================
-echo   ����Ŀ¼: %DEPLOY_DIR%
-echo   Ŀ�����: %EXE_NAME%
+echo   部署目录: %DEPLOY_DIR%
+echo   目标程序: %EXE_NAME%
 echo.
 
-REM --- ǰ�ü��: exe �Ƿ���� ---
+REM --- 前置检查: exe 是否存在 ---
 if not exist "%DEPLOY_DIR%%EXE_NAME%" (
-    echo [X] ����: ��ǰĿ¼��δ�ҵ� %EXE_NAME%
-    echo     �뽫 Release ��������뱾�ű�����ͬһĿ¼
+    echo [X] 错误: 当前目录下未找到 %EXE_NAME%
+    echo     请将 Release 编译产物与本脚本放在同一目录
     goto :failed
 )
 
-REM --- ǰ�ü��: windeployqt �Ƿ���� ---
+REM --- 前置检查: windeployqt 是否可用 ---
 where windeployqt >nul 2>&1
 if errorlevel 1 (
-    echo [X] ����: δ�ҵ� windeployqt
-    echo     ���� QT_BIN ·���Ƿ���ȷ: %QT_BIN%
+    echo [X] 错误: 未找到 windeployqt
+    echo     请检查 QT_BIN 路径是否正确: %QT_BIN%
     goto :failed
 )
 
-REM ===== ���� 1/3: windeployqt �ռ� Qt ���� =====
-echo [1/3] ���� windeployqt, �ռ� Qt ����ʱ����...
+REM ===== 步骤 1/3: windeployqt 收集 Qt 依赖 =====
+echo [1/3] 运行 windeployqt, 收集 Qt 运行时依赖...
 windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw "%EXE_NAME%"
 if errorlevel 1 (
-    echo [X] ����: windeployqt ִ��ʧ��
+    echo [X] 错误: windeployqt 执行失败
     goto :failed
 )
-echo     [OK] Qt DLL ��ƽ̨����Ѿ�λ
+echo     [OK] Qt DLL 与平台插件已就位
 echo.
 
-REM ===== ���� 2/3: ���� MinGW ����ʱ DLL =====
-REM windeployqt �����ѿ�������, ����ǿ�Ƹ���ȷ����ȫ
-echo [2/3] ���� MinGW ����ʱ DLL...
-for %%F in (libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll) do (
-    if exist "%MINGW_BIN%\%%F" (
-        copy /Y "%MINGW_BIN%\%%F" "%DEPLOY_DIR%" >nul 2>&1
+REM ===== 步骤 2/3: 拷贝 VC++ 运行时 DLL =====
+REM MSVC 编译的程序依赖 VC++ 运行时; windeployqt 不拷贝这些, 需手动复制
+echo [2/3] 拷贝 VC++ 运行时 DLL...
+for %%F in (vcruntime140.dll vcruntime140_1.dll msvcp140.dll msvcp140_1.dll msvcp140_2.dll) do (
+    if exist "C:\Windows\System32\%%F" (
+        copy /Y "C:\Windows\System32\%%F" "%DEPLOY_DIR%" >nul 2>&1
         echo     [OK] %%F
     ) else (
-        echo     [!] ����: δ�ҵ� %%F
+        echo     [!] 警告: 未找到 %%F
     )
 )
 echo.
 
-REM ===== ���� 3/3: �������󹤾� (FFmpeg / ADB) =====
-REM selfCheck() �� exe ͬ������ FFmpeg_tools/bin/ �� Adb_tools/bin/
-echo [3/3] �������󹤾�...
+REM ===== 步骤 3/3: 拷贝捆绑工具 (FFmpeg / ADB) =====
+REM selfCheck() 在 exe 同级查找 FFmpeg_tools/bin/ 和 Adb_tools/bin/
+echo [3/3] 拷贝捆绑工具...
 
 if exist "%PROJECT_ROOT%\FFmpeg_tools\bin" (
     xcopy /E /I /Q /Y "%PROJECT_ROOT%\FFmpeg_tools\bin" "%DEPLOY_DIR%FFmpeg_tools\bin" >nul 2>&1
     if errorlevel 1 (
-        echo     [X] ����: FFmpeg_tools ����ʧ��
+        echo     [X] 错误: FFmpeg_tools 拷贝失败
         goto :failed
     )
-    echo     [OK] FFmpeg_tools\bin - ffmpeg.exe, ffprobe.exe ��
+    echo     [OK] FFmpeg_tools\bin - ffmpeg.exe, ffprobe.exe 等
 ) else (
-    echo     [X] ����: Դ·��������: %PROJECT_ROOT%\FFmpeg_tools\bin
+    echo     [X] 错误: 源路径不存在: %PROJECT_ROOT%\FFmpeg_tools\bin
     goto :failed
 )
 
 if exist "%PROJECT_ROOT%\Adb_tools\bin" (
     xcopy /E /I /Q /Y "%PROJECT_ROOT%\Adb_tools\bin" "%DEPLOY_DIR%Adb_tools\bin" >nul 2>&1
     if errorlevel 1 (
-        echo [X] ����: Adb_tools ����ʧ��
+        echo [X] 错误: Adb_tools 拷贝失败
         goto :failed
     )
-    echo     [OK] Adb_tools\bin - adb.exe, AdbWinApi.dll ��
+    echo     [OK] Adb_tools\bin - adb.exe, AdbWinApi.dll 等
 ) else (
-    echo     [X] ����: Դ·��������: %PROJECT_ROOT%\Adb_tools\bin
+    echo     [X] 错误: 源路径不存在: %PROJECT_ROOT%\Adb_tools\bin
     goto :failed
 )
 
 echo.
 echo ============================================================
-echo   �������!
-echo   %DEPLOY_DIR% ���ǿɶ������е�������
-echo   ֱ��ѹ�����ļ���Ϊ .zip ���ɷ���
+echo   部署完成!
+echo   %DEPLOY_DIR% 已是可独立运行的完整包
+echo   直接压缩此文件夹为 .zip 即可发行
 echo ============================================================
 echo.
 pause
@@ -110,6 +109,6 @@ exit /b 0
 
 :failed
 echo.
-echo ����ʧ��, �밴������ʾ�Ų������
+echo 部署失败, 请按上述提示排查后重试
 pause
 exit /b 1
